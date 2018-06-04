@@ -1,0 +1,1327 @@
+#!/usr/bin/env tcl
+#
+# Copyright (c) 2015, Infor, All rights reserved.
+#
+# Author: Charlie Bursell
+#   Date: 07/30/15
+#
+#  A redo of the hcismat script for SMAT DB
+#  Most flags and execution remain the same except for site option
+#  Site is needed for database encryption key
+#  Default is current site
+#
+#  Also added an option to specify inbound or outbout thread
+#  Needed for resending messages pre or post tps
+#  Default is ob_post_tps
+#
+#  It would be wise to copy an active, still in use, DB to another
+#  file prior to running this
+#
+#  A lot of error checking is done and the script will exit if
+#  something is wrong.  However I can't presuppose every possible
+#  error.  If you get weird results, take a look at the usage.
+#
+#  Run the script with no arguments to see the usage statement
+#
+#  Feel free to modify as you see fit but I would appreciate it
+#  if you would give the script a different name and remove my
+#  name as the author.  I take credit for my screw ups but not
+#  for others  :-)
+#
+#  Assumes Tcl 8.5+
+#
+# 08/15/2015 - Added -regx and other flags
+#
+# The -regx flag allows you to pass a Tcl Regular Expression for the search
+# The Regular Expression should be enclosed in double quotes ("")
+#
+# Regular Expression metacharacters must be escaped.  For example:
+#   "SMITH\^JOE" - looks for SMITH followed by subfield JOE
+#   or "\|123456\|"  Looks for any field containing only 123456
+#
+# The best advice for Regular Expressions is to try it in a simple Tcl script
+# using similar messages in the test.  If it does not work there, it will not
+# work here.
+#
+# In addition we have added another flag to complement Regular Expression
+# if the flag -nocase is set it will result in something similar to:
+#       regexp -nocase -- <expression> <variable>
+# By default, the Regular Expression search is case sensitive.
+#
+# An added feature for HL7 messages only.
+# If the string passed to -regs is inclosed within exclamation characters like:
+#       -regx "!PID.5=BROWN!"  or "!PID.5=BROWN\^JAMES!"
+#
+# If the string is properly composed like: <SEG NAME>.:Field No.>=<Value>
+# It will be converted to a regular expression
+#
+# NOTE NOTE NOTE
+# On Windows you must enclose the SMAT DB path, if it contains glob characters,
+# and the regx expression in double quotes ("").  On Unix you must use single
+# quotes instead of double quotes!
+#
+# For date time values, sds and sde, only the first 8 bytes is required.  If
+# at least 8 bytes but less than 14 bytes is supplied, the time field will be
+# filled.  The start date will be filled with zeros.  The end date hours, if
+# missing will be filled with 23 while minutes and seconds will be filled with
+# 59.  For example if given: -sds 20150815 -sde 2015o615 the date time will be
+# converted to sds = 20150815000000 sde = 201508152359,  The search will return
+# all records with TimeIn value of 20150815xxxxxx[xxx]. 
+#
+# Note that CL 6.0 stores time in seconds while CL 6.1+ stores in miliseconds
+# This script can only accept time to the seconds.  Therefore on CL 6.1+ a
+# search like -sds 201508151515 -sde 201508151515 might return more than one
+# record since CL can process more than one record per second
+#
+# No validation is done if the -site value is passed.  If that value is not
+# a valid key for an encrypted DB, the DB access will fail and you will get
+# an error message.  This allows a DB from a different root or machine to
+# be processed.  The default is the current site.
+#
+# By default, all records to a file, orsf/oruf, are written as length encoded.
+# If the -nl flag is supplied they will be written as newline delimited.
+#
+# By default, when resending messages to a thread, it assumed you are sending
+# to an outbound thread using ob_post_tps and that you are sending as data.
+# If the -inout flag is used it is changed to an IB thread with default of
+# ib_post_tps, still as data.  If the -ib flag is used, resend through any
+# procs like ob_pre_tps for OB thread and ib_pre_tps for IB thread.  Using
+# the -reply flag will cause data to be sent as a reply instead of data.
+# Do not use -reply unless you are really sure you need to resend a reply
+# which is in the SMAT DB
+# For any resend options the thread must be UP and running!
+#
+# If no search values, sds/sde/sms/sme or regx is supplied -sall is assumed
+# and all records are returned.  It is an error to supply sds/sde/sms/sme
+# or regx and -sall.
+# selected
+#
+# Play around with it and provide feeback if you like.
+################################################################################
+#
+
+# Need cmdline package from tcllib
+if {[catch {package require cmdline} err]} {
+
+    puts stderr "[file rootname [file tail $::argv0]]:\
+    Cannot load cmdline package: $err!\n"
+    puts stderr "ABORTED ......\n"
+    exit -64
+}
+
+
+namespace eval SMAT {
+
+    # Get name of script for errors
+    set myName [file rootname [file tail $::argv0]]
+
+    # Need the package
+    if {[catch {package require sqlite} err]} {
+
+    puts stderr "$myName: Cannot load sqlite package: $err!\n"
+    puts stderr "ABORTED ......\n"
+    exit -64
+    }
+
+    # Basic query - other conditions to be added as requesred
+    set DBQUERY {SELECT MessageContent FROM smat_msgs}
+
+    # Query if unselected messages wanted
+    set USELECT {SELECT MessageContent FROM smat_msgs WHERE MessageContent NOT IN ($QUERY)}
+
+    # is this windows?
+    set isWin 0
+    if {[string toupper $::tcl_platform(platform)] eq "WINDOWS"} {
+    set isWin 1
+    }
+
+    # Regexp builder model
+    set REGMODEL {\r?$SEG\|([^|]*\|){$CNT}[^|]*$VAL}
+
+    ############################################################################
+    # getArgs - Process command line args
+    #
+    # Usage: getArgs <inArray>
+    #           inArray = Array of command line arguments
+    #
+    # Notes: Process and validate command line arguments.  Set shared variables
+    #        for other routines to use
+    #
+    # Returns: nothing
+    ############################################################################
+    proc getArgs {inArray} {
+    
+    variable myName       ;# main procedure name
+    variable PRIORITY     ;# Message Priority
+    variable SITE         ;# SITE for encrypted DB
+    variable MIDSTART     ;# Start MID
+    variable MIDEND       ;# END MID
+    variable SMATDB       ;# Target thread or file name
+    variable DTSTART      ;# Start Date
+    variable DTEND        ;# End Date
+    variable IB           ;# Send via ib proc 0/1
+    variable REPLY        ;# Send data as reply
+    variable NL           ;# Write file newline delimited 0/1
+    variable NOTMID       ;# Negate MID 0/1
+    variable NOTDT        ;# Negate Date 0/1
+    variable SALL         ;# SAll flag 0/1
+    variable DBLIST       ;# List of database files
+    variable OPERATION "" ;# orsf, oruf, orst or orut
+    variable TARGET ""    ;# File path or thread name
+    variable REGX         ;# Regular Expression
+    variable INOUT        ;# IB or OB thread
+    variable NOCASE       ;# If set exex REGEX as nocase
+
+
+    # Make the array local
+    upvar $inArray argArray
+
+    # Some values will always be just 1 or 0 - set them
+    foreach {ary var} [list ib IB reply REPLY nl NL smn NOTMID\
+        sdn NOTDT sall SALL inout INOUT nocase NOCASE] {
+
+        set $var $argArray($ary)
+    }
+
+    # Get dates
+    set DTSTART $argArray(sds)
+    set DTEND $argArray(sde)
+
+    # Get MIDS
+    set MIDSTART $argArray(sms)
+    set MIDEND $argArray(sme)
+
+    # Get regx
+    set REGX $argArray(regx)
+
+    # Cannot have SALL and DATE or MID
+    if {$SALL} {
+
+        if {"$DTSTART$DTEND$MIDSTART$MIDEND$REGX" ne ""} {
+
+        puts stderr "\n$myName: Cannot specify sall flag\
+        with Regex, Date or MID\n"
+        puts stderr "$myName -help for Usage\n"
+        exit -64
+
+        }
+
+    }
+
+    # Set Site. Do before DB validation
+    set SITE $argArray(site)
+    if {$SITE eq ""} {set SITE $::HciSite}
+
+    # Get the operation. either orsf, oruf, orst or orut
+    # And set TARGET if there
+    set orsf $argArray(orsf)
+    set oruf $argArray(oruf)
+    set orst $argArray(orst)
+    set orut $argArray(orut)
+    getOP $orsf $oruf $orst $orut
+
+    # Validate SMAT DB string
+    set SMATDB $argArray(i)
+
+    # Validate
+    validateDB
+
+    # Validate Regular Expression if there
+    if {$REGX ne ""} {checkRegexp}
+
+    # Set and validate priority
+    set PRIORITY $argArray(pri)
+
+    if {![string is digit -strict $PRIORITY] ||
+        $PRIORITY < 4096 || $PRIORITY > 8192} {
+
+        puts stderr "$myName: Invalid Priority (4096 - 8192)!"
+        puts stderr "$myName -help for Usage\n"
+        exit -64
+    }
+
+    # Validate dates if needed
+    if {$DTSTART ne "" || $DTEND ne ""} {
+
+        checkDate
+    }
+
+    # Validate MIDs
+    foreach val [list MIDSTART MIDEND] {
+
+        # Get value
+        set mid [set $val]
+
+        # Note no -strict, may be empty
+        if {![string is digit $mid]} {
+
+        puts stderr "\n$myName: Invalid $val: $mid\n"
+        puts stderr "$myName -help for usage\n"
+        exit -64
+        }
+    }
+
+    # iF both start and end mids are set make sure end is after start
+    if {$MIDSTART ne "" && $MIDEND ne ""} {
+    
+        if {$MIDSTART > $MIDEND} {
+
+            puts stderr "\n$myName: Start MID cannot be greater than end MID!\n"
+        puts stderr "$myName -help for usage\n"
+        exit -64
+        }
+    }
+
+    # All Done
+    return ""
+    }
+
+    ##########################################################################
+    # tstRegexp - A fuction to install in sqlite to do REGEXP function
+    #
+    # tstRegexp <val> <exp>
+    #           val = Value to test
+    #           exp - Regular expression
+    #
+    # Some testing has been done on regular expression but not all
+    # Several characters will have to be escaped - See comments above
+    #
+    # Returns: 1 if match else 0
+    ##########################################################################
+    proc tstRegexp {val exp} {
+    variable NOCASE     ;# If set execute as nocase
+
+    # Do regexp and return 1 or 0
+    if {$NOCASE} {
+
+        return [regexp -nocase -- $exp $val]
+
+    } else {
+
+        return [regexp -- $exp $val]
+    }
+    }
+
+    ##########################################################################
+    # performOP - Perform the query(s) then call appropriate routine to dispose
+    #              or unselected
+    #
+    # performOP
+    #           Uses shared variables
+    #
+    # Call routine to build query for each message if required
+    # Queries all DB and puts message in buffer
+    # Calls appropriate routine for file or thread
+    #
+    # Returns: Nothing.  Set shared variables
+    ##########################################################################
+    proc performOP {} {
+
+    variable myName     ;# main procedure name
+    variable SITE           ;# Site name
+    variable QUERY      ;# The sqlite query
+    variable DBLIST     ;# List of databases
+    variable ENCRYPT    ;# List of Encrypted flags for each DB
+    variable DBVERSION  ;# List DB version 1 for 6.0, 0 for 6.1+
+    variable MESSAGES ""    ;# Message buffer
+    variable OPERATION  ;# Desired operation
+    variable REGX       ;# Regular Expression
+
+
+    # Process each DB
+    # The three list should be equal
+    foreach DSN $DBLIST encrypt $ENCRYPT version $DBVERSION {
+
+        # Build or rebuild query as needed
+        buildQuery $version
+
+        # Open the database - we have done error checking before
+        sqlite DB $DSN
+
+        # If encrypted issue PRAGMA
+        if {$encrypt} {DB eval "PRAGMA KEY='$SITE'"}
+
+        # If Rexgexp load function
+        if {$REGX ne ""} {DB function REGEXP tstRegexp}
+
+        # Select messages from each DB
+        if {[catch {DB eval $QUERY} recs]} {
+
+            # Close
+        DB close
+
+        puts stderr "\n$myName: Error querying DB - $recs\n"
+        exit -64
+        }
+
+        # Tell em what we did and save messages
+        if {$recs eq ""} {
+
+        puts stdout "\n$myName: No records found in $DSN!\n"
+
+        } else {
+
+        puts stdout "\n$myName: [llength $recs] records found in $DSN\n"\
+
+        # Store in MSGS list
+        set MESSAGES [concat $MESSAGES $recs]
+
+        }
+
+        # Close this one
+        DB close
+    }
+
+    # See if we got any to process
+    if {$MESSAGES eq ""} {
+
+        puts stderr "\n$myName: No messages selected - exit!\n"
+        exit -64
+    } else {
+
+        puts stdout "\n$myName: [llength $MESSAGES] total records found!\n"
+    }
+
+    # We have messages to process = see what to call
+    if {[string index $OPERATION end] eq "f"} {
+
+        # Process to file
+        writeFile
+
+    } else {
+
+        # Process to file
+        writeThread
+    }
+
+    # All done
+    return ""
+    }
+
+    ############################################################################
+    # checkRegexp - Does some preliminary checking of regular expression
+    #
+    # Usage: checkRegexp
+    #       Use shared variables
+    #
+    # Notes: Makes sure REGX will at least compile
+    #
+    #        If passed as !......! where ..... will be a phrase like:
+    #           PID.4=<SOMEVALUE>
+    #        We will attempt to build a regular expression
+    #
+    # returns: nothing
+    ############################################################################
+    proc checkRegexp {} {
+
+    variable myName     ;# main procedure name
+    variable REGX       ;# Regular Expression
+    variable REGMODEL   ;# Model Regexp
+    
+    # See if string enclosed within !....!
+    if {[regexp -- {^!(.*)!$} $REGX {} str]} { 
+
+        # Should be string like PID.5=<somevalue>
+        # REGMODEL needs the variables SEG, CNT and VAL
+
+        # Split on = to get both sides
+        lassign [split $str =] segfld VAL
+
+        # Split on . to get segment and field
+        lassign [split $segfld .] SEG CNT
+
+        # Do some rudimentary checking
+        if {$SEG eq "" || $VAL eq "" || ![string is digit -strict $CNT]} {
+        puts stderr "\n$myName: Error in Regular Expression:\n$err\n"
+        puts stderr "If passed as !...!, must contain s phrase like\
+            PID.4=VALUE\n"
+        puts stderr "$myName -help for usage\n"
+        exit -64
+        }
+
+        # Decrement count
+        incr CNT -1
+
+        # If MSH must decrement 1 more since | is field sep char
+        if {$SEG eq "MSH"} { incr CNT -1 }
+
+        # subst to regexp
+        set REGX [subst -nocommands -nobackslashes $REGMODEL]
+
+        # Tell em
+        puts stdout "\n\n$myName: Created REGEXP: $REGX\n\n"
+    }
+
+    # A string to make sure regexp will compile
+    set str "Now is the time"
+
+    if [catch {regexp -- $REGX $str} err] {
+
+        puts stderr "\n$myName: Error in Regular Expression:\n$err\n"
+        puts stderr "$myName -help for usage\n"
+        exit -64
+    }
+
+    # All done
+    return ""
+    }
+
+    ############################################################################
+    # validateDB - Validates that file path is to valid SMAT sqlite file
+    #
+    # Usage: validDB
+    #       Uses shared variables
+    #
+    # Notes: Validates DB file then opens if valid
+    #        Opens with name handle "DB" which will be available throughout
+    #        the script
+    #
+    #        Must be careful not to open non-existent file as sqlite will
+    #        create it if it does not exist
+    #   
+    #        Unecrypted sqlite files are easy as the begin with the characters
+    #        "sqlite".  Encrypted is a bit tougher
+    #
+    #        Must be careful when issuing a PRAGMA statement if we think DB
+    #        is encrypted.  If it is sqlite and not encrypted we just made it so
+    #
+    #
+    # returns: nothing - exit if error
+    ############################################################################
+    proc validateDB {} {
+
+    variable myName     ;# main procedure name
+    variable SITE       ;# Site name
+    variable DBLIST {}  ;# List of database files
+    variable ENCRYPT {} ;# Encrypted flag for each DB
+    variable DBVERSION {}   ;# List DB version 1 for 6.0, 0 for 6.1+
+    variable SMATDB     ;# Input string
+
+    # Get list of DB files
+    # Normalize just in case
+    set GLOB [lindex [file normalize $SMATDB] 0]
+    
+    set TMPLIST [glob -nocomplain $GLOB]
+
+    # Make sure not empty
+    if {[string trim $TMPLIST] eq ""} {
+
+        puts stderr "\n$myName: No files found in path $SMATDB!"
+        puts stderr "$myName -help for usage\n"
+
+        exit -64
+    }
+
+    # Loop through list of files
+    foreach DSN $TMPLIST {
+
+        # See if file even exists and is regular file
+
+        if {![file isfile $DSN]} {
+        puts stderr "\n$myName: $DSN does not exist or not regular file!"
+        puts stderr "Ignore this one\n"
+        continue
+        }
+
+        # Test for unencrypted sqlite - First 6 bytes = sqlite
+        if {[catch {open $DSN rb} fd]} {
+
+        puts stderr "\n$myName: Cannot open $DSN - ignored\n"
+        continue -64
+        }
+
+        # Read first 6 bytes.  If unencrypted sqlite s/b "SQLite"
+        if {[string toupper [read $fd 6]] eq "SQLITE"} {
+
+        set encrypt 0
+
+        } else {
+
+        # Assume encrypted
+        set encrypt 1
+        }
+
+        # Close the file
+        close $fd
+
+        # Assume it is sqlite and open as such
+        sqlite DB $DSN
+
+        # Assume 6.1+
+        set VERSION 0
+        # If suspect encrypted issue PRAGMA
+        if {$encrypt} {DB eval "PRAGMA KEY='$SITE'"}
+
+        # Query for version to see if SMAT DB - Save version
+        if {[catch {DB eval "SELECT Version from smat_info" } rslt]} {
+
+        DB close
+        puts stderr "\n$myName: Cannot query $DSN as SMAT DB - $rslt\n"
+
+        if {$encrypt} {
+            puts stderr "Make sure site name is correct for this SMAT DB!\n"
+        }
+
+        puts stderr "Ignore file $DSN\n"
+
+        continue
+        }
+
+        # Save Version if 6.0
+        if {$rslt eq "1"} {set VERSION $rslt}
+
+        # Save to list
+        lappend DBLIST $DSN
+
+        # Save encryped flag
+        lappend ENCRYPT $encrypt
+
+        # Save version
+        lappend DBVERSION $VERSION
+
+        # Close this one
+        DB close
+
+    }
+
+    # Make sure not empty
+    if {[string trim $DBLIST] eq ""} {
+
+        puts stderr "\n$myName: No good SMATDB files found in path $SMATDB!"
+        puts stderr "...... ABORT ...\n"
+
+        exit -64
+    }
+
+    # As per Keith, do a dictionary sort on file list
+    set DBLIST [lsort -dictionary $DBLIST]
+
+    # If here, all is OK
+    return ""
+    }
+    
+    ############################################################################
+    # getOP - Get operation and sets shared variables
+    #
+    # Usage: getOP orsf oruf orst orut
+    #       orsf = Contains path of file to write selected messages
+    #       oruf = Contains path of file to write unselected messages
+    #       orst = Contains name of thread to resend selected messages
+    #       orut = Contains name of thread to resend unselected messages
+    #
+    # Notes: Makes sure no more than one operation selected
+    #        Validate file path or thread
+    #
+    # returns: nothing = Aborts if invalid
+    ############################################################################
+    proc getOP {orsf oruf orst orut} {
+
+    variable myName     ;# main procedure name
+    variable OPERATION  ;# orsf, oruf, orst or orut
+    variable TARGET     ;# File path or thread name
+    variable PROCESSNAME "" ;# Processs name if thread
+    variable OPTLIST
+
+    # must have at least one
+    if {"$orsf$oruf$orst$orut" eq ""} {
+
+        puts stderr "\n$myName: At least one of orsf, oruf, orst or orut\
+                is required!\n"
+        puts stderr "$myName -help for usage\n"
+        exit -64
+
+    }
+
+    # Make sure of no more than one OP
+    set flag 0
+    foreach var [list orsf oruf orst orut] {
+
+        set val [set $var]
+        if {$val ne ""} {
+
+        # Keep track of how many are set
+        incr flag
+
+        # Set OPERATION and TARGET
+        set OPERATION $var
+        set TARGET $val
+        }
+
+    }
+
+    # If none selected we are done
+    if {!$flag} {return ""}
+
+    # If more than one, error
+    if {$flag > 1} {
+
+        puts stderr "\n$myName: Can only select one\
+                of orsf, oruf, orst or orut!\n"
+        puts stderr "$myName -help for usage\n"
+
+        exit -64
+    }
+
+    # Test filepath if file
+    if {[string index $OPERATION end] eq "f"} {
+
+        # Get file path
+        set path [file dirname [file normalize $TARGET]]
+
+        if {![file isdirectory $path]} {
+
+        puts stderr "\n$myName: File path $path does not exist!\n"
+        puts stderr "$myName -help for usage\n"
+        exit -64
+        }
+
+    } else {
+
+        # Must be thread - validate
+        # If no process name invalid thread
+
+        set PROCESSNAME [readNet $TARGET]
+
+        if {$PROCESSNAME eq ""} {
+
+        puts stderr "\n$myName: Thread $TARGET does not exist in NetConfig"
+        puts stderr "$myName -help for usage\n"
+        exit -64
+        }
+
+        # See if it looks like the thread is running
+        if {[catch {
+
+                msiAttach
+                set lst [msiGetStatSample $TARGET]
+
+                set status "" ; keylget lst PSTATUS status
+                set status [string toupper $status]
+
+            } err]} {
+
+        puts stderr "\n$myName: Error reading MSI area: $err\n"
+        puts stderr "$myName -help for usage\n"
+        exit -64
+        }
+
+        if {[lsearch -exact {UP INEOF TIMER} $status] < 0} {
+
+        puts stderr "\n$myName: Thread $TARGET status $status\
+                Cannot resend!\n"
+        exit -64
+        }
+
+
+    }
+
+    # All Done
+    return ""
+    }
+
+    ##########################################################################
+    # readNet - read Netconfig and get process name
+    #
+    # readNet  <thread>
+    #       thread = thread name to get process name
+    #
+    # Read the site NetConfig file find thread and get process name
+    #
+    # Returns: Process name or empty string if not found
+    ##########################################################################
+    proc readNet {thread} {
+    variable myName     ;# Name of main program
+
+        # Load the NetConfig
+
+        # This is not really needed as default is to read site NetConfig
+        set Net [file join $::HciSiteDir NetConfig]
+
+        if {![netcfgLoad $Net]} {
+
+            puts stderr "\n$myName: Failed to read NetConfig file"
+            puts stderr "$myName -help for usage\n"
+            exit -64
+        }
+
+        # List of Threads
+        set connList [netcfgGetConnList]
+
+    # If thread not found return empty string
+    if {[lsearch -exact $connList $thread] < 0} { return "" }
+
+        # Get connection data for thread
+        set thdData [netcfgGetConnData $thread]
+
+    # Get process name
+    set proc "" ; keylget thdData PROCESSNAME proc
+
+        # All done
+        return $proc
+    }
+    
+    ############################################################################
+    # checkDate - makes sure dates are valid
+    #
+    # Usage: checkDate 
+    #       Use shared variables
+    #
+    # Notes: Checks for valid date and converts to seconds.
+    #        Note if CL version 6.1+ seconds will later be converted to
+    #        milliseconds
+    #
+    #        At a minimun YYYYMMDD required. For start time default time is
+    #        00:00:00.  For end time it is 23:59:59
+    #   
+    # Returns: nothing
+    ############################################################################
+    proc checkDate {} {
+
+    variable myName     ;# main procedure name
+    variable DTSTART    ;# Start Date
+    variable DTEND      ;# End Date
+
+    # Validate dates - first make sure they are scanable
+    foreach var [list DTSTART DTEND] {
+
+        # Get the value
+        set date [set $var]
+
+        # Make sure it is there
+        if {$date eq ""} {continue}
+
+        # Make it scanable
+        regsub -- {(\d{8})(.*)$} $date {\1 \2} scandt
+
+        # See if valid
+        if {[catch {clock scan $scandt} seconds] ||
+                [string length $scandt] < 8} {
+
+        puts stderr "\n$myName: Invalid [string range $var 2 end] date: $date\n"
+        puts stderr "$myName -help for usage\n"
+        exit -64
+        }
+
+        # In case no time passed
+        if {[llength $scandt] == 1} {lappend scandt ""}
+
+        # If no hours/minutes/seconds
+        # for start 00:00:00
+        # for end 23:59:59
+
+        set tm [lindex $scandt 1]
+        set hr [string range $tm 0 1]
+        set mi [string range $tm 2 3]
+        set se [string range $tm 4 5]
+
+        # Convert to seconds
+        if {$var eq "DTSTART"} {
+
+        if {$hr eq ""} {set hr 00}
+        if {$mi eq ""} {set mi 00}
+        if {$se eq ""} {set se 00}
+
+        set scandt [lreplace $scandt 1 1 "$hr$mi$se"]
+        set seconds [clock scan $scandt]
+        set DTSTART $seconds
+
+        } else {
+
+        # Must be DTEND
+        if {$hr eq ""} {set hr 23}
+        if {$mi eq ""} {set mi 59}
+        if {$se eq ""} {set se 59}
+        
+        set scandt [lreplace $scandt 1 1 "$hr$mi$se"]
+        set seconds [clock scan $scandt]
+        set DTEND $seconds
+        }
+    }
+
+    # If both start and end dates are set make sure end is after start
+    
+    if {$DTSTART ne "" && $DTEND ne ""} {
+
+        if {$DTSTART > $DTEND} {
+
+        puts stderr "\n$myName: start date cannot\
+                be greater than end date!\n"
+        puts stderr "$myName -help for usage\n"
+        exit -64
+        }
+    }
+
+    # All done
+    return ""
+    }
+    
+    ############################################################################
+    # buildQuery - Build the sqlite query
+    #
+    # Usage: buildQuery version
+    #       ver = Version number from smat_info Table
+    #
+    # Notes: Builds the query based on arguments passed
+    #        If dates queried, a new query for each DB since some may be
+    #        from Cloverleaf 6.0 and some from 6.1+
+    #        So as not to build the query unless changed, save previous 
+    #        version and only rebuild query if changed.
+    #        If no date, no need to rebuild
+    #
+    # returns: nothing = Aborts if invalid
+    ############################################################################
+    proc buildQuery {ver} {
+
+    variable myName     ;# main procedure name
+    variable SITE       ;# Site name
+    variable SITE           ;# SITE for encrypted DB
+    variable MIDSTART       ;# Start MID
+    variable MIDEND         ;# END MID
+    variable DTSTART        ;# Start Date
+    variable DTEND          ;# End Date
+    variable NOTMID         ;# Negate MID 0/1
+    variable NOTDT          ;# Negate Date 0/1
+    variable SALL           ;# SAll flag 0/1
+    variable DBLIST         ;# List of database files
+    variable OPERATION      ;# orsf, oruf, orst or orut
+    variable REGX           ;# Regular Expression
+    variable DBQUERY    ;# Base (generic query)
+    variable USELECT    ;# Query for unselected messages
+    variable QUERY      ;# The final query for sqlite
+    variable VERSION        ;# Previous / current version
+
+    # Make sure QUERY is build first time
+
+    # If no date and query already built no need for new one
+    if {$DTSTART eq "" && $DTEND eq "" && [info exists Query]} {
+        return ""
+    }
+
+    # If no version change, just return previous query
+    if {[info exists preVersion] && $ver eq $preVersion} {return ""}
+
+    # Build a new or first query
+
+    # Save version
+    set VERSION $ver
+
+    # Init QUERY
+    set QUERY ""
+
+    # See if date query needed
+    set dtQry ""
+    if {"$DTSTART$DTEND" ne ""} {set dtQry [dateQuery]}
+
+    # See if MID query needed
+    set midQry ""
+    if {"$MIDSTART$MIDEND" ne ""} {set midQry [midQuery]}
+
+    # Build Query
+    if {$dtQry ne ""} {
+
+        # Add date query
+        set QUERY "$DBQUERY WHERE ($dtQry)"
+
+        # Add MID if there
+        if {$midQry ne ""} {append QUERY " AND ($midQry)"}
+
+    } elseif {$midQry ne ""} {
+
+        # MID query with no date
+        set QUERY "$DBQUERY WHERE ($midQry)"
+
+    } else {
+
+        # Just Query for all
+        set QUERY $DBQUERY
+    }
+
+    # Add regex if needed
+    if {$REGX ne ""} {
+
+
+        if {[regexp -nocase -- {WHERE} $QUERY]} {
+
+        # If WHERE clause just add to it
+        set QUERY "$QUERY AND REGEXP(MessageContent, '$REGX')"
+
+        } else {
+
+        # Add WHERE clause
+        set QUERY "$QUERY WHERE REGEXP(MessageContent, '$REGX')"
+        }
+    }
+
+    # Unselected or selected. Default is selected
+    if {[string index $OPERATION end-1] eq "u"} {
+
+        # Wants unselected message
+        set QUERY [subst -nocommands $USELECT]
+    }
+    
+    # All done
+    return ""
+    }
+    
+    ##########################################################################
+    # dateQry - Build date query string
+    #
+    # dateQry
+    #       Uses shared variables
+    #
+    # Build the sub-query and return it
+    #
+    # Makes seconds into milliseconds if needed - CL 6.1+
+    # For start set 000 for end set 999 done in dtQry
+    #
+    # Returns: query string
+    ##########################################################################
+    proc dateQuery {} {
+    variable DTSTART    ;# Start date
+    variable DTEND      ;# End date
+    variable NOTDT      ;# Negate date
+    variable VERSION        ;# Previous / current version
+
+    # Init variables to maintain content of shared variables
+    set st $DTSTART 
+    set en $DTEND
+
+    if {$VERSION ne "1"} {
+        append st 000
+        append en 999
+    }
+
+    # Start date
+    if {$DTSTART ne ""} {
+
+        # See if negate NOTDT set
+        if {!$NOTDT} { 
+
+        set st "TimeIn >= $st"
+
+        } else {
+
+        set st "TimeIn < $st"
+        }
+    }
+
+    # End Date
+    if {$DTEND ne ""} {
+
+        # See if negate NOTDT set
+        if {!$NOTDT} { 
+
+        set en "TimeIn <= $en"
+
+        } else {
+
+        set en "TimeIn > $en"
+        }
+    }
+
+    # See if both or just one set
+    if {$DTSTART ne "" && $DTEND ne ""} {
+
+        # Both do AND/OR based on negate NOTDT
+        if {!$NOTDT} {
+        return "$st AND $en"
+
+        } else {
+
+        return "$st OR $en"
+        }
+
+    } elseif {$DTSTART ne ""} {
+
+        # Just start return that
+        return $st
+
+    } else {
+
+        # Just end - return that
+        return $en
+    }
+
+    # Just in case - should never get here
+    return ""
+    }
+
+    ##########################################################################
+    # midQry - Build MID query string
+    #
+    # midQry - Uses shared variable
+    #
+    # Build the sub-query and return it
+    # Similar to date query above
+    #
+    # Returns: query string
+    ##########################################################################
+    proc midQuery {} {
+    variable MIDSTART   ;# Start MID
+    variable MIDEND     ;# End MID
+    variable NOTMID     ;# Negate Mid
+
+    # Set variables
+    set st ""; set en ""
+
+    # Start MID?
+    if {$MIDSTART ne ""} {
+
+        # Negate if NOTMID set
+        if {!$NOTMID} { 
+
+        set st "MidNum >= $MIDSTART"
+
+        } else {
+
+        set st "MidNum < $MIDSTART"
+        }
+    }
+
+    # End MID?
+    if {$MIDEND ne ""} {
+
+        # Negate if NOTMID set
+        if {!$NOTMID} { 
+
+        set en "MidNum <= $MIDEND"
+
+        } else {
+
+        set en "MidNum > $MIDEND"
+        }
+    }
+
+    # If both set do AND/OR depending on negate NOTMID
+    if {$st ne "" && $en ne ""} {
+
+        # Negate if NOTMID set
+        if {!$NOTMID} {
+
+        return "$st AND $en"
+
+        } else {
+
+        return "$st OR $en"
+        }
+
+    } elseif {$st ne ""} {
+
+        # If just start return that
+        return $st
+
+    } else {
+
+        # If just end return that
+        return $en
+    }
+
+    # Just in case - should never be here
+    return ""
+    }
+    
+    ##########################################################################
+    # writeFile - Write records to a file
+    #
+    # writeFile
+    #
+    # Write records, selected or unselected to specified file
+    # writw as new-line or length encoded (default)
+    #
+    # Returns: Nothing
+    ##########################################################################
+    proc writeFile {} {
+    variable myName     ;# Name of main program
+    variable MESSAGES   ;# List of messages
+    variable NL     ;# Newline flag
+    variable TARGET     ;# File name
+
+    # Catch errors - open in binary for HL7
+    if {[catch {open $TARGET wb+} outFd]} {
+
+            puts stderr "\n$myName: Failed to open outbound file: $TARGET"
+            puts stderr "$outFd\n"
+            exit -64
+    }
+
+    # If NL just write it out and return.  MSGS is in a list
+    if {$NL} {
+
+        puts $outFd [join $MESSAGES \n]
+        close $outFd
+        return ""
+
+    }
+
+    # If here do length encoded
+    # Get length of each record and prepend length, 10 bytes, 
+    # right justified, zero filled
+
+    foreach rec $MESSAGES {
+
+        # Record length in bytes
+        set LEN [string length $rec]
+
+        # Prepend length 10 bytes RJZF
+        set rec "[format %010d $LEN]$rec"
+
+        # Write with no newline
+        puts -nonewline $outFd $rec
+    }
+
+    # Close file
+    close $outFd
+
+    # All done
+    return ""
+    }
+
+    ##########################################################################
+    # writeThread - Write records to a thread if thread up and running
+    #
+    # writeThread 
+    #
+    # Write records, selected or unselected to specified thread
+    #
+    # Create a temporary file of nl delimited records and resend
+    # On Windows us hcicmdnt.  On Unix use hcicmd
+    #
+    # It seems hcicmd or hcicmdnt wants us in the process directory to do this
+    #
+    # Returns: Nothing
+    ##########################################################################
+    proc writeThread {} {
+    variable myName     ;# Name of main program
+    variable PROCESSNAME    ;# Process name if target is thread
+    variable isWin      ;# = 1 if Windows
+    variable MESSAGES   ;# List of messages
+    variable INOUT      ;# IB or OB thread
+    variable PRIORITY   ;# Resend priority
+    variable REPLY      ;# Resend as REPLY 
+    variable IB     ;# Send through IB proc
+    variable TARGET     ;# THread name
+
+    # Thread name
+
+    # Build command - assume UNIX
+    set cmd hcicmd
+
+    # If windows use hcicmdnt
+    if {$isWin} {set cmd hcicmdnt}
+
+    # IB or OB thread - assume OB thread
+
+    # Assume ob_post+tps
+    set tps ob_post_tps
+
+    # if pre tps wanted still assuming OB thread
+    if {$IB} {set tps ob_pre_tps}
+
+    # If INBOUND thread change
+    if {$INOUT} {
+         set tps [string map [list ob ib] $tps]
+    }
+
+    # Data or reply - Assume data
+    set type data
+
+    # Change if needed
+    if {$REPLY} {set type reply}
+
+    # Build resend command
+    set resend {[list $TARGET resend $tps $type $PRIORITY $fn nl]}
+
+    # Change to process directory.  Save current location
+    set CWD [pwd]
+    cd [file join $::HciProcessesDir $PROCESSNAME]
+
+    # Temp file name
+    set fn "[pid].tmp"
+
+    # Catch errors
+    if {[catch {open $fn wb} outFd]} {
+
+            puts stderr "\n$myName: Failed to open temporary file: $fn"
+            puts stderr "$outFd\n"
+            exit -64
+    }
+
+    # Write to temp file
+    puts $outFd [join $MESSAGES \n]
+
+    # Close it
+    close $outFd
+
+    # Resend
+    set res [exec $cmd -p $PROCESSNAME -c "[subst $resend]"]
+
+    puts stdout "\n$myName: $res\n"
+    puts stdout "Check the process logs for success"
+
+    # Remove temp file
+    file delete $fn
+
+    # Return to original working dir
+    cd $CWD
+
+    return ""
+    }
+
+}
+ 
+# All of the options should be parsed here
+proc hcidbsmat {} {
+    
+    # Process the command line
+
+    set parameters {
+        {i.arg      ""   "Full path of SMAT DB(s) - Required - Can use glob pattern"}
+        {site.arg   ""   "Name of site for encryption key - Default current site"}
+        {pri.arg    5120 "Resend priority  (4096 - 8192) Default = 5120"}
+        {reply           "Resend messages as reply instead of data"}
+        {ib          "Resend messages pre_tps instead of post_tps"}
+        {nl              "Write file as newline delimited, default is len10"}
+        {regx.arg   ""   "Valid Tcl REGX or if value like: !PID.4=SMITH!, regex will be created"}
+    {nocase      "If specified, ignores case with regular expression"}
+        {orsf.arg   ""   "Resend selected messages to file <Filename>"}
+        {oruf.arg   ""   "Resend unselected messages to file <Filename>"}
+        {orst.arg   ""   "Resend selected messages to thread <Thread Name>"}
+        {orut.arg   ""   "Resend unselected messages to thread <Thread Name>"}
+    {inout       "If set thread (orst/orut) = IB thread, deft = outbound"}
+        {sds.arg    ""   "Starting at date and time <date> yyyymmdd[hhmmss]"}
+        {sde.arg    ""   "Ending at date and time <date> yyyymmdd[hhmmss]"}
+        {sdn             "Not (negate) meaning of date search"}
+        {sms.arg    ""   "Starting at message id <MID> (####)"}
+        {sme.arg    ""   "Ending at message id <MID> (####)"}
+        {smn             "Not (negate) meaning of MID search"}
+        {sall            "Select all messages - default if no other selection\n\n\n\
+    \tNOTE: The SMAT DB path, if it contains glob characters, and the regx expression\n
+    *MUST* be enclosed in double quotes on Windows (\"\") or single quotes on Unix ('')\n\n
+    ===================== SEE COMMENTS IN Tcl FILE FOR MORE =====================\n\n"}
+    }
+
+
+    # Test for invalid options
+    if {[catch {array set arg [cmdline::getoptions ::argv $parameters]} err]} {
+        puts stderr "$SMAT::myName: Error running cmdline - $err\n"
+        exit -64
+    }
+
+    if {$arg(i) eq ""} {
+
+    puts stderr "\n$SMAT::myName: SMAT DB (-i) is required!"
+    puts stderr "$SMAT::myName -help for usage\n"
+    exit -64
+    }
+
+    # Process command line arguments and do some validation
+    SMAT::getArgs arg
+
+    # Perform the indicated Operation
+    SMAT::performOP
+    
+    # All Done
+    return ""
+}
+
+hcidbsmat

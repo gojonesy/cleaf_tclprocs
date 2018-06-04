@@ -1,0 +1,6072 @@
+# Package generated on: Thu May 14 10:55:38 CST 2015
+#
+
+#@package: dataCheck dcUniqueNames notNumeric checkProcessArray checkHostArray
+
+# $Id: dataCheck.tcl,v 1.181.2.3 2015/05/14 02:05:45 jianchen Exp $
+#
+# dataCheck.tcl	- check	validity of host config	data
+#
+###############################################################
+#                           NOTICE                            #
+#                                                             #
+#   THIS SOFTWARE IS THE PROPERTY OF AND CONTAINS             #
+#   CONFIDENTIAL INFORMATION OF INFOR AND/OR ITS AFFILIATES   #
+#   OR SUBSIDIARIES AND SHALL NOT BE DISCLOSED WITHOUT PRIOR  #
+#   WRITTEN PERMISSION. LICENSED CUSTOMERS MAY COPY AND       #
+#   ADAPT THIS SOFTWARE FOR THEIR OWN USE IN ACCORDANCE WITH  #
+#   THE TERMS OF THEIR SOFTWARE LICENSE AGREEMENT.            #
+#   ALL OTHER RIGHTS RESERVED.                                #
+#                                                             #
+#   (c) COPYRIGHT 2014 INFOR.  ALL RIGHTS RESERVED.           #
+#   THE WORD AND DESIGN MARKS SET FORTH HEREIN ARE            #
+#   TRADEMARKS AND/OR REGISTERED TRADEMARKS OF INFOR          #
+#   AND/OR ITS AFFILIATES AND SUBSIDIARIES. ALL RIGHTS        #
+#   RESERVED.  ALL OTHER TRADEMARKS LISTED HEREIN ARE         #
+#   THE PROPERTY OF THEIR RESPECTIVE OWNERS.                  #
+#                                                             #
+###############################################################
+#
+# Exported Procedures:
+#	dcUniqueNames		- Check	index/SYMNAME uniqueness
+#	checkProcessArray	- process data checker driver proc
+#	checkHostArray		- host data checker driver proc
+#	notNumeric		- test numeric-ness of a string
+
+#######################################################################
+# dcUniqueNames	- Check	index/SYMNAME uniqueness
+# Args:
+#	dataArrayVar		= host config array
+#	indexName		= array	index hostname
+#	symName			= SYMNAME value
+#	idxInUse		= should the index already be in use?
+#
+# Returns:
+#	0			= name pair is not unique
+#	1			= name pair is	   unique
+#
+# Notes:
+#	If the index is	already	in use but not expected	to be, the name
+#	is not unique.	If any other index possesses the same SYMNAME
+#	value, it is not unique.
+#
+# PACKAGE-EXPORT: dcUniqueNames
+#
+proc dcUniqueNames { dataArrayVar indexName symName idxInUse } {
+    upvar $dataArrayVar	dataArray
+
+    if [info exists dataArray] {
+	set lowIndexName [string tolower $indexName]
+
+	# If the index is in use but isn't supposed to be, fail
+
+	if { $idxInUse == 0 } {
+	    set	usedKeys [string tolower [array	names dataArray]]
+	    if { [lsearch $usedKeys $lowIndexName] >= 0	} {
+		return 0
+	    }
+	}
+
+	set symName [string tolower $symName]
+
+	foreach	idxVal [array names dataArray] {
+	    # Test all other index values
+	    if [string compare $indexName $idxVal] {
+
+		# Fetch, down-case, and	compare	the SYMNAME
+		# value.  A match means	it's not unique.
+
+		if [keylget dataArray($idxVal) SYMNAME testName] {
+		    set	testName [string tolower $testName]
+
+		    if [cequal $symName	$testName] {
+			return 0
+		    }
+		}
+	    }
+	}
+    }
+
+    return 1
+}
+
+#######################################################################
+# notNumeric - test numeric-ness of a string
+# Args:
+#	testValue			= value	to be tested
+#	testMode			= 'pure' or 'signed'
+#
+# Returns:
+#	1 if value meets criteria
+#	0 otherwise
+#
+# NOTE:
+#	This is	really just an exported	interface to CHD:notNumeric{}.
+#
+# PACKAGE-EXPORT: notNumeric
+#
+proc notNumeric	{testValue {testMode pure}} {
+    return [CHD:notNumeric $testValue $testMode	warnText]
+}
+
+#######################################################################
+# checkProcessArray - process data checker driver proc
+# Args:
+#	warnListVar		= warning list variable
+#	dataArrayVar		= name of array	containing process data
+#	processList		= list of processs to check
+#				  (empty means check all)
+#	flags			= flags	of checks NOT to make
+#
+# NOTE:	Some of	the data checker procs assume that a global variable
+#	named HciRootDir exists	and contains the name of the directory
+#	serving	as the base configuration directory for	the engine.
+#
+# PACKAGE-EXPORT: checkProcessArray
+#
+proc checkProcessArray { warnListVar dataArrayVar
+		       { processList {}	} { flags {} }}	{
+    global HciSiteDir
+
+    upvar $warnListVar warnList
+    upvar $dataArrayVar	processArray			;# attach to host array
+
+    listBlowCache					;# reset lists
+
+    if [lempty $processList] {
+	set processList	[array names processArray]
+    }
+
+    # The first	column is the desired data key;	the second is the 
+    # field identification string relative to the GUI; the third is the	type
+    # of check to be done, using the fourth column's contents accordingly.
+    # 'exist' is simply	an existence check (though the datum may be
+    # examined more closely in a later cross-check w/ another field.
+
+    set	simpleCheckList	{
+	{ DOMAINNAME	{Execution hub domain name}	exist		}
+	{ EODEFAULT	{Default output	configuration}	eoalias		}
+	{ EOXLATE	{Xlate output configuration}	eoalias		}
+	{ HUBNAME	{Execution hub hostname}	exist		}
+	{ LOGCYCLESIZE	{Log file size threshold}	purenum		}
+	{ MSGSPACELIM	{Disk queueing space threshold}	purenum		}
+	{ XLATESTARTMODE {Run xlate procs in start-mode} purenum	}
+    }
+
+    # Walk the array and check individual process config entries
+
+    foreach processName	$processList {
+	set processConfig $processArray($processName)		;# copy	config
+
+	# Check the process name length
+	if { [string length $processName] > 57} {
+	    error "Process name '$processName' exceeds the 57 character length limit. "
+	}
+
+	# If $processList is empty or a	given host's SYMNAME value is in
+	# $processList,	check that process's entry.
+	if { [lempty $processList] ||
+	     [lsearch $processList $processName] >= 0
+	} {
+	    CHD:doSimpleChecks $processName   simpleCheckList	\
+				processConfig warnList
+	}
+    }
+}
+
+#######################################################################
+# checkHostArray - host	data checker driver proc
+# Args:
+#	warnListVar		= warning list variable
+#	dataArrayVar		= name of array	containing host	data
+#	hostList		= list of hosts	to check
+#				  (empty means check all)
+#	flags			= flags	of checks NOT to make
+#
+# NOTE:	Some of	the data checker procs assume that a global variable
+#	named HciRootDir exists	and contains the name of the directory
+#	serving	as the base configuration directory for	the engine.
+#
+# PACKAGE-EXPORT: checkHostArray
+#
+proc checkHostArray { warnListVar dataArrayVar { hostList {} } { flags {} }} {
+    upvar $warnListVar warnList
+    upvar $dataArrayVar	hostArray				;# attach to host array
+
+    set	warnListLen [llength $warnList]
+
+    set	hostList [string tolower $hostList]		;# all LOWER case
+
+    listBlowCache					;# reset lists
+
+    set	_CHDsymNames  {}			;# empty SYMNAME list
+    set	_CHDdataTypes {}			;# empty DATAFORMAT.TYPE list
+    
+    set smatFiles {}                            ;# empty smatFiles list
+
+    # Before we	check anything else, we	walk through the array and make
+    # sure that	every keyed list entry has a SYMNAME and that all of the
+    # SYMNAME values are unique	within the array.  Also, if a DATATYPE
+    # value is present,	drop it	into _CHDdataTypes (keyed by SYMNAME
+    # value).
+    foreach i [array names hostArray] {
+	if { [lsearch -exact [keylkeys hostArray($i)] "CLOVERLEAF_INTERSITE_DEST" ] != -1 } { 
+		# record inter-site destination as protocol
+		lappend	_CHDsymNames [string tolower $i] 
+		
+		#skip inter-site destination checking
+		continue 
+	}  
+	if [keylget hostArray($i) SYMNAME curName] {
+	    set	lowerName [string tolower $curName]
+	    if { [lsearch $_CHDsymNames	$lowerName] >= 0 } {
+		lappend	warnList "SYMNAME '$curName' not unique"
+	    } else {
+		lappend	_CHDsymNames $lowerName
+		
+		# Check the thread name length
+		if { [string length $lowerName] > 63} {
+		    error "Thread name '$lowerName' exceeds the 63 character length limit. "
+		}
+
+		# Check thread name.
+		# Thread Names may contain only letters, numbers and underscores,
+		# and can not be named with process name plus '_xlate' and '_cmd'.
+		keylget	hostArray($i) PROCESSNAME curProName
+		set	lowerProName [string tolower $curProName]
+		if {[regexp {\W} $lowerName]} {
+		    lappend	warnList "Error: Invalid characters found\
+		    in thread name '<$curName>'."
+		} 
+		if {[string equal $lowerName [format "%s_xlate" $lowerProName]] || \
+		    [string equal $lowerName [format "%s_cmd" $lowerProName]] } {
+		    lappend	warnList "Error: Thread name conflicts with internal\
+		    thread name: '<$curName>'. Please select a different name."
+		}
+	    }
+	} else {
+	    lappend warnList "array entry under	key '$i' has no	SYMNAME"
+	}
+
+	if [keylget hostArray($i) DATAFORMAT.TYPE curType] {
+	    keylset _CHDdataTypes $lowerName $curType
+	}
+    }
+
+    # If there's anything wrong	so far,	bail out now.
+
+    if { [llength $warnList] !=	$warnListLen } {
+	return $warnList
+    }
+
+    # Set up the simple	(i.e., single datum) check list
+    # The first	column is the desired data key (note that SYMNAME isn't
+    # included as it has already been checked);	the second is the 
+    # field identification string relative to the GUI; the third is the	type
+    # of check to be done, using the fourth column's contents accordingly.
+    # 'exist' is simply	an existence check (though the datum may be
+    # examined more closely in a later cross-check w/ another field;
+    # 'binary' tests that the field's value is 0 or 1;
+    # 'purenum'	and 'signednum'	check for numeric validity.
+
+    set	simpleCheckList	{
+	{ AUTOSTART		{Auto start}		binary		}
+	{ DATAFORMAT.TYPE	{Message format}	exist		}
+	{ DATAXLATE		{Message routing}	exist		}
+	{ EOCONFIG		{Output	configuration}	eoalias		}
+	{ GROUPS		{Group names}		exist		}
+	{ HOSTDOWN		{Wire host down}	binary		}
+	{ KEEPMSGONDISK		{Keep msgs on disk}	binary		}
+	{ OUTBOUNDONLY		{Outbound only}		binary		}
+	{ PROCESSNAME		{Process name}		exist		}
+
+	{ PROTOCOL.TYPE		{Protocol type}		exist		}
+
+	{ RECVCONTROL.ACKCONTROL {Protocol ACK control}	exist		}
+	{ RECVCONTROL.EOMSG	{Output	configuration}	eoalias		}
+	{ RECVCONTROL.MSGPRIO	{Message priority}	exist		}
+
+	{ REPLYCONTROL.REPLYGEN	{Reply generation}	exist		}
+	{ REPLYCONTROL.TIMEOUT	{Reply wait timeout}	exist		}
+	{ REPLYCONTROL.WAIT	{Await replies}		binary		}
+
+	{ REPLYFORMAT.TYPE	{Reply type}		exist		}
+
+	{ REPLYXLATE		{Reply routing}		exist		}
+
+	{ SAVEMSGS.INFILE	{Inbound save file}	 exist		}
+	{ SAVEMSGS.INSAVE	{Save inbound messages}	 binary		}
+	{ SAVEMSGS.OUTFILE	{Outbound save file}	 exist		}
+	{ SAVEMSGS.OUTSAVE	{Save outbound messages} binary		}
+	{ SAVEMSGS.SAVEINARCHIVE {Save inbound messages} binary		}
+	{ SAVEMSGS.INARCHIVE	{Inbound save table}	 exist		}
+	{ SAVEMSGS.SAVEOUTARCHIVE {Save outbound messages} binary	}
+	{ SAVEMSGS.OUTARCHIVE	{Outbound save table} exist		}
+
+	{ SENDDATACTRL.FWDTHREAD     {Old Data forward thread}		exist	 }
+	{ SENDDATACTRL.FORWARDTHREAD {Data forward thread}		exist	 }
+
+	{ SENDDATACTRL.HOLDMSGS	 {Hold data msgs}		binary	 }
+	{ SENDDATACTRL.INTERVAL	 {Data send interval}		purenum	 }
+	{ SENDDATACTRL.FAILPROCS {Data send fail procs}		exist	 }
+	{ SENDDATACTRL.OKPROCS	 {Data send OK procs}		exist	 }
+	{ SENDDATACTRL.PREWRITEPROCS {Data prewrite procs}		exist	 }
+	{ SENDDATACTRL.RETRIES	 {Data send retries}		signednum}
+
+	{ SENDREPLYCTRL.FORWARDTHREAD {Reply forward thread}	exist	 }
+	{ SENDREPLYCTRL.FWDTHREAD {Old Reply forward thread}	exist	 }
+	{ SENDREPLYCTRL.HOLDMSGS  {Reply data msgs}		binary	 }
+	{ SENDREPLYCTRL.INTERVAL  {Reply send interval}		purenum	 }
+	{ SENDREPLYCTRL.FAILPROCS {Reply send fail procs}	exist	 }
+	{ SENDREPLYCTRL.OKPROCS	  {Reply send OK procs}		exist	 }
+	{ SENDREPLYCTRL.PREWRITEPROCS {Reply prewrite procs}	exist	 }
+	{ SENDREPLYCTRL.RETRIES	  {Reply send retries}		signednum}
+
+	{ SMS			{TPS configuration}	exist		}
+	{ STARTPROCS		{Startup procs}		exist		}
+	{ USERECOVERDB		{Use recover database}	binary		}
+    }
+	# BAS removed following	line from above	list per PR 3232
+	# { USEDISKMSGS		{Use disk-based	msgs}	binary		}
+
+    # Walk the array and check individual host config entries
+
+    foreach i [array names hostArray] {	
+	set hostConfig $hostArray($i)			;# copy	config
+	set symName [keylget hostConfig	SYMNAME] ;# get name
+	
+	#verify the inter-site routing port configuration
+	CHD:checkPortConfig warnList $symName hostConfig
+
+	if { [lsearch -exact [keylkeys hostArray($i)] "CLOVERLEAF_INTERSITE_DEST" ] != -1 } { 
+		#skip inter-site destination checking
+		continue 
+	}  
+
+	# If $hostList is empty	or a given host's SYMNAME value	is in
+	# $hostList, check that	host's entry.
+	if { [lempty $hostList]	|| [lsearch $hostList $symName]	>= 0 } {
+
+	    CHD:doSimpleChecks $symName	simpleCheckList	hostConfig warnList
+
+	    # This is where we do the more complex checks.  Most of the
+	    # following	checks are different enough from the others
+	    # that it isn't worth generalizing them.  Sigh.
+
+	    # Check RECVCONTROL.MSGPRIO	value: 4096 <= x < 8192
+	    if [keylget	hostConfig RECVCONTROL.MSGPRIO keyVal] {
+		if [CHD:notNumeric $keyVal pure	warnText] {
+		    lappend warnList "$symName Message priority: $warnText"
+		} elseif { $keyVal < 4096 || $keyVal >=	8192 } {
+		    set	   errMsg "$symName Message priority: "
+		    append errMsg "$keyVal is not 4096 <= x < 8192"
+
+		    lappend warnList $errMsg
+		}
+	    }
+
+	    # Check SEND{DATA,RELPY}CTRL values
+	    CHD:checkSendCtrl warnList $symName	hostConfig _CHDsymNames	\
+			      SENDDATACTRL  Data
+	    CHD:checkSendCtrl warnList $symName	hostConfig _CHDsymNames	\
+			      SENDREPLYCTRL Data
+
+	    # PROCESSNAME must be non-null
+
+	    if [keylget	hostConfig PROCESSNAME keyVal] {
+		if [lempty $keyVal] {
+		    lappend warnList "$symName Process name: no	value supplied"
+		}
+	    }
+
+	    # Check DATAFORMAT
+
+	    CHD:checkTypeConfig	warnList $symName	\
+		hostConfig DATAFORMAT "Data config"
+
+	    # Check PROTOCOL
+
+	    CHD:checkProtocolConfig warnList $symName hostConfig
+
+	    # Check RECVCONTROL.ACKCONTROL TPS config
+	    if [keylget	hostConfig RECVCONTROL recvConfig] {
+		CHD:checkTpsList warnList $symName recvConfig	\
+		    ACKCONTROL	"Protocol ACK control"
+	    }
+
+	    # Check SAVEMSGS list
+	    CHD:checkSaveMsgs warnList $symName	hostConfig IN
+	    CHD:checkSaveMsgs warnList $symName	hostConfig OUT
+
+	    # Get the SMAT file names
+	    set smatInFile {}
+	    set smatOutFile {}
+	    CHD:getSaveMsgsFileNames $symName hostConfig smatInFile smatOutFile
+			
+	    if {[llength $smatInFile] != 0} {
+		lappend smatFiles $smatInFile
+	    }
+	    if {[llength $smatOutFile] != 0} {
+		lappend smatFiles $smatOutFile
+	    }
+			
+	    # check DATAXLATE
+	    CHD:checkTranConfig	warnList $symName hostConfig	\
+		DATAXLATE DATAFORMAT "Transaction routing"	\
+		_CHDdataTypes _CHDsymNames
+
+	    # Check the	REPLY stuff only if REPLYCONTROL.WAIT is enabled
+
+	    set	keyVal {}
+	    if { [keylget hostConfig REPLYCONTROL.WAIT keyVal] &&
+		 [cequal $keyVal "1"] }	{
+		# TIMEOUT is -1	or positive
+		if [keylget hostConfig REPLYCONTROL.TIMEOUT keyVal] {
+		    if [CHD:notNumeric $keyVal signed warnText]	{
+			lappend	warnList "$symName Reply Timeout: $warnText"
+		    } else {
+			if { $keyVal < -1 || $keyVal ==	0 } {
+			    set	   warnText "$symName Reply Timeout '$keyVal' "
+			    append warnText "must be -1	or positive"
+
+			    lappend warnList $warnText
+			}
+		    }
+		} else {
+		    lappend warnList "$symName REPLYCONTROL has	no TIMEOUT key"
+		}
+
+		# Check	REPLYFORMAT
+		CHD:checkTypeConfig warnList $symName	\
+		    hostConfig REPLYFORMAT "Reply config"
+
+		# REPLYCONTROL.REPLYGEN	contains TYPE and PROC/TEXT
+		# if appropriate
+
+		if [keylget hostConfig REPLYCONTROL.REPLYGEN keyVal] {
+		    if [keylget	keyVal TYPE typeVal] {
+			switch -- $typeVal {
+			    none {
+				;# all is good
+			    }
+
+			    procs {
+				CHD:checkTpsList warnList $symName	\
+						 keyVal	PROCS		\
+						 "Reply	Gen procs"
+			    }
+
+			    text {
+				if { [keylget keyVal TEXT genText] == 0	} {
+				    set	   warnText "$symName Reply Gen	"
+				    append warnText "has no TEXT key"
+
+				    lappend warnList $warnText
+				}
+			    }
+
+			    default {
+				set    warnText	"$symName: bogus REPLYGEN "
+				append warnText	"type '$typeVal'"
+
+				lappend	warnList $warnText
+			    }
+			}
+		    } else {
+			lappend	warnList "$symName REPLYGEN has	no TYPE	key"
+		    }
+		}
+
+		# check	REPLYXLATE
+	    }
+
+	    # Check SMS	values
+
+	    CHD:checkSmsConfig warnList	$symName hostConfig
+
+	    # Check STARTUP
+	    CHD:checkTpsList warnList $symName hostConfig	\
+			     STARTPROCS	"Startup procs"
+	}
+    }
+
+    # Check tcpip server port see if there has same port configured in multiple servers
+    CHD:badTcpServerPort warnList hostArray
+
+    # Check the smat file names
+    CHD:checkSmatFiles warnList smatFiles
+}
+
+########################
+# Internal procedures...
+
+
+#####################################################################
+# Name:		CHD:checkKeyLen
+# Purpose:	fetch a	key and	check the value's length
+# Args:		protoListVar	= PROTOCOL config list variable
+#		key		= key to fetch
+#		desc		= key description
+#		lenMin		= value	min length
+#		lenMax		= value	max length
+#		warnString	= basic	warning	string
+#		warnListVar	= warning list variable
+#
+
+proc CHD:checkKeyLen { protoListVar key	desc lenMin lenMax
+		       warnString warnListVar  } {
+    upvar $protoListVar	protoList	\
+	  $warnListVar	warnList
+
+    if [keylget	protoList $key val] {
+	set len	[clength $val]
+	if { $len < $lenMin || $len > $lenMax }	{
+	    set	    warnText "Bad $desc	'$val' -- "
+	    append  warnText "must have	$lenMin..$lenMax characters"
+	    lappend warnList "$warnString: $warnText"
+	}
+    } else {
+	lappend	warnList "$warnString: no $key value"
+    }
+}
+
+
+#####################################################################
+# CHD:checkLenEncode - check length-encoding keys
+# Args:		warnListVar	= warning list variable
+#		warnString	= basic	warning	string
+#		protoListVar	= PROTOCOL config list variable
+#
+
+proc CHD:checkLenEncode	{ warnListVar warnString protoListVar }	{
+    upvar $warnListVar	warnList	\
+	  $protoListVar	protoList
+
+    set	boolList { 0 1 }
+
+    if [keylget	protoList ENCODE_TYPE encodeType] {
+	switch -- $encodeType {
+	    ascii {
+		if [keylget protoList ENCODE_LEN encodeLen] {
+		    if [CHD:notNumeric $encodeLen positive warnText] {
+			lappend	warnList "$warnString: $warnText"
+		    }
+		} else {
+		    lappend warnList "$warnString: no ENCODE_LEN value"
+		}
+
+		if { [keylget protoList ENCODE_FILL encodeFill] == 0 } {
+		    lappend warnList "$warnString: no ENCODE_FILL value"
+		}
+
+		set justList "l	r"
+		CHD:notInList protoList	ENCODE_JUST	\
+			      justList $warnString warnList
+	    }
+
+	    binary {
+		set lenList { 2	4 }
+		CHD:notInList protoList	ENCODE_LEN lenList	\
+			      $warnString warnList
+
+		CHD:notInList protoList	ENCODE_ISNATIVE	\
+			      boolList $warnString warnList
+	    }
+	    
+        encapsulated {
+            if [keylget protoList MLP_PREFIX mlpPrefix] {
+                if { [clength $mlpPrefix] > 31 } {    
+                    lappend	warnList "$warnString: MLP User Prefix contains invalid escape or too long"
+                }
+	        }
+	        if [keylget protoList MLP_TRAILER mlpTrailer] {
+                if { [clength $mlpTrailer] > 31 } {    
+                    lappend	warnList "$warnString: MLP User Trailer contains invalid escape or too long"
+                }
+	        }
+        }
+
+	    default {
+		set    warnText	"$warnString: unknown encode "
+		append warnText	"type '$encodeType'"
+
+		lappend	warnList $warnText
+	    }
+	}
+    } else {
+	lappend	warnList "$warnString: no ENCODE_TYPE value"
+    }
+
+    CHD:notInList protoList ENCODE_INCLUSIVE boolList $warnString warnList
+}
+
+
+#####################################################################
+# CHD:checkReconnect - check RECONNECT and REOPEN keys
+# Args:		warnListVar	= warning list variable
+#		warnString	= basic	warning	string
+#		protoListVar	= PROTOCOL config list variable
+#		type		= REOPEN check type (defaults to 'positive')
+#
+
+proc CHD:checkReconnect	{ warnListVar warnString
+			  protoListVar { type positive }} {
+    upvar $warnListVar	warnList	\
+	  $protoListVar	protoList
+
+    set	boolList { 0 1 }
+
+    CHD:notInList protoList RECONNECT boolList $warnString warnList
+
+    # REOPEN must be present and positive numeric
+    if [keylget	protoList REOPEN reopenValue] {
+	if [CHD:notNumeric $reopenValue	$type warnText]	{
+	    lappend warnList "$warnString Reopen: $warnText"
+	}
+    } else {
+	lappend	warnList "$warnString: no REOPEN value"
+    }
+}
+
+#####################################################################
+# CHD:checkDelayedConnection - check DELAYCONNECTION and RECONNECT keys
+# Args:		warnListVar	= warning list variable
+#		warnString	= basic	warning	string
+#		protoListVar	= PROTOCOL config list variable
+#
+
+proc CHD:checkDelayedConnection	{ warnListVar warnString
+			  protoListVar } {
+    upvar $warnListVar	warnList	\
+	  $protoListVar	protoList
+
+    set	boolList { 0 1 }
+
+    CHD:notInList protoList RECONNECT boolList $warnString warnList
+
+    set delayed 0
+    set reconn 0
+    keylget protoList DELAYCONNECT delayed
+    keylget protoList RECONNECT reconn
+    # RECONNECT should not be used togather with DELAYCONNECT
+    if { $delayed && $reconn } {
+        lappend warnList "$warnString Auto-reconnect should not be enabled while Delayed Connection is selected"
+    }
+}
+
+#####################################################################
+# CHD:checkSaveMsgs - Check a thread's SAVEMSGS	list
+# Args:		warnListVar	= warning list variable
+#		symName		= thread symbolic name
+#		hostDataVar	= config list variable
+#		dir		= 'IN' or 'OUT'
+# Returns:	
+# Notes:	Unlike the simple checks, complex checks may
+#		produce	multiple messages; as a	result,	they assume direct
+#		responsibility for adding messages to the warning list
+#
+
+proc CHD:checkSaveMsgs { warnListVar symName hostDataVar dir } {
+    upvar			\
+	$warnListVar warnList	\
+	$hostDataVar hostConfig
+
+    set	strFlagKey ${dir}SAVE
+    set	strFileKey ${dir}FILE
+    
+    set strFlagKeyMsgarchive SAVE${dir}ARCHIVE
+    set strTableKey ${dir}ARCHIVE
+
+    if [keylget	hostConfig SAVEMSGS listSaveMsgs] {
+	set strFlagVal {}
+
+	if [keylget listSaveMsgs $strFlagKey strFlagVal] {
+	    set	strFileVal {}
+
+	    if [keylget	listSaveMsgs $strFileKey strFileVal] {
+		if { [llength [split $strFileVal]] > 1 } {
+		    set	   warnMsg "$symName $dir save msg file	cannot "
+		    append warnMsg "contain whitespace"
+
+		    lappend warnList $warnMsg
+		}
+	    }
+
+	    if { [cequal $strFlagVal 1]	&& [lempty $strFileVal]	} {
+		set    warnMsg "$symName ${dir}BOUND message save is enabled "
+		append warnMsg "but the	filename is empty"
+
+		lappend	warnList $warnMsg
+	    }
+	}
+
+	# check the message archive
+	if [keylget listSaveMsgs $strFlagKeyMsgarchive strFlagVal] {
+            set strFileVal {}
+
+            if [keylget listSaveMsgs $strTableKey strTableVal] {
+                if { [llength [split $strTableVal]] > 1 } {
+                    set    warnMsg "$symName $dir msg archive table cannot "
+                    append warnMsg "contain whitespace"
+
+                    lappend warnList $warnMsg
+                }
+            }
+
+            if { [cequal $strFlagVal 1] && [lempty $strTableVal]        } {
+                set    warnMsg "$symName ${dir}BOUND message archive is enabled "
+                append warnMsg "but the table name is empty"
+
+                lappend warnList $warnMsg
+            }
+        }
+    }
+}
+
+
+####################################################################################
+# CHD:getSaveMsgsFileNames - Get a thread's SAVEMSGS file list
+# Args:		symName		= thread symbolic name
+#		hostDataVar	= config list variable
+#               smatFileInValue = inbound SMAT file name
+#		smatFileOutValue= outbound SMAT file name
+# Returns:	
+# Notes:	Get a thread's SAVEMSGS file list including the inbound and outbound
+#		The format of return string is {processName SMATfilename}"
+#
+
+proc CHD:getSaveMsgsFileNames { symName hostDataVar smatFileInValue smatFileOutValue} {
+	upvar			\
+	$hostDataVar hostConfig \
+	$smatFileInValue smatInFile \
+	$smatFileOutValue smatOutFile
+
+    set strFileInKey INFILE
+    set strFlagInKey INSAVE
+    set strFileOutKey OUTFILE
+    set strFlagOutKey OUTSAVE
+    set strInFileVal {}
+    set strOutFileVal {}
+
+    # Get the process name 
+    keylget hostConfig PROCESSNAME processName
+
+    # Get the SMAT file name
+    if [keylget hostConfig SAVEMSGS listSaveMsgs] {
+	set strFlagInVal {}
+	
+	if [keylget listSaveMsgs $strFlagInKey strFlagInVal] {
+	    if [cequal $strFlagInVal 1] {
+		keylget listSaveMsgs $strFileInKey strInFileVal
+	    }
+	}
+
+	set strFlagOutVal {}
+	if [keylget listSaveMsgs $strFlagOutKey strFlagOutVal] {
+	    if [cequal $strFlagOutVal 1] {
+		keylget listSaveMsgs $strFileOutKey strOutFileVal
+	    }
+	}
+    }
+    
+    if { [lempty $strInFileVal] && [lempty $strOutFileVal] } {
+	return
+    }
+
+    if { ![cequal $strInFileVal $strOutFileVal] && ![lempty $strOutFileVal] } {
+	keylset smatOutFile  $processName $strOutFileVal
+    }
+
+    if { ![lempty $strInFileVal] } {
+	keylset smatInFile  $processName $strInFileVal
+    }
+}
+
+####################################################################################
+# CHD:checkSmatFiles - Check the smat file list
+# Args:		warnListVar  = warning list variable
+#		smatFilesVal = the smat file list
+# Returns:	
+# Notes:	check the SMAT file list if the SMAT file exists more than once 
+#		in one process.
+#
+
+proc CHD:checkSmatFiles {warnListVar smatFilesVar} {
+    upvar                     \
+	$warnListVar warnList \
+	$smatFilesVar smatFiles
+
+    set klist {}
+
+    foreach thread $smatFiles {
+	set pname [lindex $thread 0 0]
+	set smat  [lindex $thread 0 1]
+	set smats {} 
+	if {![lempty $klist]} {
+	    if {[keylget klist $pname smats] != 0} {
+		if {[lsearch $smats $smat] != -1} {
+      		    lappend	warnList	\
+		    "The SMAT file '$smat' exists more than once in the process named '$pname'"
+		    continue
+		}
+	    }
+	}
+	keylset klist $pname [lappend smats $smat]
+    } 
+}
+
+#####################################################################
+# CHD:checkSendCtrl - Check a thread's SEND*CTRL list
+# Args:		warnListVar	= warning list variable
+#		symName		= thread symbolic name
+#		hostDataVar	= config list variable
+#		symNameVar	= symname list
+#		topKey		= DATA/REPLY send control key
+#		type		= "Data" or "Reply"
+# Returns:	
+# Notes:	Unlike the simple checks, complex checks may
+#		produce	multiple messages; as a	result,	they assume direct
+#		responsibility for adding messages to the warning list
+#
+
+proc CHD:checkSendCtrl { warnListVar symName hostDataVar symNameVar topKey
+			 type }	{
+    upvar			\
+	$warnListVar warnList	\
+	$hostDataVar hostConfig	\
+	$symNameVar  _CHDsymNames
+
+    if [keylget	hostConfig $topKey listSendCtrl] {
+	# Check	SENDDATACTRL.FAILPROCS value
+	CHD:checkTpsList warnList $symName listSendCtrl	\
+	    FAILPROCS  "$type send fail	procs"
+
+	# Check	SENDDATACTRL.OKPROCS value
+	CHD:checkTpsList warnList $symName listSendCtrl	\
+	    OKPROCS  "$type send ok procs"
+
+	# Check	SENDDATACTRL.PREWRITEPROCS value
+	CHD:checkTpsList warnList $symName listSendCtrl	\
+	    PREWRITEPROCS  "$type prewrite procs"
+
+	# If a FWDTHREAD value is given, the named thread must exist
+
+	if [keylget listSendCtrl FORWARDTHREAD strFwdThd] {
+	    if { [llength [split $strFwdThd]] >	1 } {
+		lappend	warnList	\
+		    "$symName $type outbound: multiple forward thread names"
+	    } elseif { [llength	$strFwdThd]
+		    && [CHD:badThreadName $strFwdThd _CHDsymNames warnText]
+	    } {
+		lappend	warnList "$symName $type send Forward: $warnText"
+	    }
+
+	    # A	host cannot be its own FORWARDTHREAD
+
+	    if [cequal $strFwdThd $symName] {
+		lappend	warnList	\
+		    "$symName $type send Forward: cannot forward to self"
+	    }
+	}
+    }
+}
+
+
+#######################################################################
+# CHD:doSimpleChecks - do simple checks	against	a config list
+# Args:
+#	itemName			= name of item being checked
+#	checkListVar			= simple checks	list variable
+#	dataListVar			= host/process config list variable
+#	warnListVar			= warning list variable
+#
+proc CHD:doSimpleChecks	{ itemName checkListVar	dataListVar warnListVar	} {
+    upvar $checkListVar	checkList $dataListVar dataList	$warnListVar warnList
+
+    foreach checkItem $checkList {
+	lassign	$checkItem keyName guiName checkType checkArg
+
+	# Make sure the	key/datum pair exists.
+	if [keylget dataList $keyName keyVal] {
+	    switch -exact -- $checkType	{
+		binary {
+		    if { [lsearch { 0 1	} $keyVal] < 0 } {
+			lappend	warnList	\
+			    "$itemName $guiName: '$keyVal' must	be 0 or	1"
+		    }
+		}
+
+		eoalias	{
+		    # Compare $keyVal w/ the list of available aliases.
+		    # $keyVal members which don't appear in the	global
+		    # list are bogus.
+
+		    set	badList	[lindex	[intersect3 $keyVal [listEoAliases]] 0]
+
+		    switch -- [llength $badList] {
+			0	{ continue }
+			1	{ set plural alias }
+			default	{ set plural aliases }
+		    }
+
+		    set	   warnText "$itemName $guiName: "
+		    append warnText "unrecognized $plural '$badList'"
+
+		    lappend warnList $warnText
+		}
+
+		exist {
+		    ;# we've already checked basic existence
+		}
+
+		purenum	-
+		signednum {
+		    if [cequal $checkType "purenum"] {
+			set numType pure
+		    } else {
+			set numType signed
+		    }
+
+		    if [CHD:notNumeric $keyVal $numType	warnText] {
+			lappend	warnList "$itemName $guiName: $warnText"
+		    }
+		}
+
+		default	{
+		    error "bogus checkType '$checkType'"
+		}
+	    }
+	} else {
+	    lappend warnList "$itemName	$guiName not found"
+	}
+    }
+}
+
+#######################################################################
+# CHD:notNumeric - check that the given	value is numeric
+# Args:
+#	checkValue			= value	to be checked
+#	mode				= 'signed' if optional [+-] allowable
+#	warnTextVar			= warning text variable	(optional)
+#
+# Returns:
+#	Warning	string (empty string means value is ok)
+#
+proc CHD:notNumeric { checkValue mode warnTextVar } {
+    switch -exact -- $mode {
+	non-negative -
+	positive     -
+	pure {
+	    set	pattern	{^[0-9]+$}			;# just	digits
+	}
+
+	signed {
+	    set	pattern	{^[+-]?[0-9]+$}			;# allow optional sign
+	}
+
+	default	{
+	    error "bogus mode '$mode'"
+	}
+    }
+
+    # If the value matches the pattern,	return 0 (i.e.,	is numeric);
+    # otherwise, set the error text (if	appropriate) and return	1
+
+    if [regexp $pattern	$checkValue match] {
+	# The pattern matched.	If the user isn't checking positive-ness
+	# or the value is already positive, all	is well.
+
+	if { [string compare $mode positive] ||	$checkValue > 0	} {
+	    return 0
+	}
+    }
+
+    upvar $warnTextVar warnText
+    set	warnText "'$checkValue'	is not a $mode number"
+    return 1
+}
+
+#######################################################################
+# CHD:badProc -	check that the given proc is available
+# Args:
+#	checkValue			= value	to be checked
+#	warnTextVar			= warning text variable
+#
+# Returns:
+#	0	= proc is OK
+#	1	= proc is bad ($warnTextVar set)
+#
+proc CHD:badProc { checkValue warnTextVar } {
+    if { [lsearch [listTclProcs] $checkValue] <	0 } {
+	upvar $warnTextVar warnText
+	set warnText "external proc '$checkValue' not available"
+	return 1
+    } else {
+	return 0
+    }
+}
+
+#######################################################################
+# CHD:badThreadName - check that the given host	is defined
+# Args:
+#	checkValue			= value	to be checked
+#	symNameVar			= symname list
+#	warnTextVar			= warning text variable
+#
+# Returns:
+#	0	= thread name is defined
+#	1	= thread name is not defined
+#
+proc CHD:badThreadName { checkValue symNameVar warnTextVar } {
+    upvar $symNameVar _CHDsymNames $warnTextVar	warnText
+
+    if { [lsearch $_CHDsymNames	[string	tolower	$checkValue]] <	0 } {
+	set warnText  "thread '$checkValue' is not currently defined"
+	return 1
+    } else {
+	return 0
+    }
+}
+
+#######################################################################
+# CHD:checkTypeConfig -	check the given	data/reply config matches the type
+# Args:
+#	warnListVar			= warning list name
+#	symName				= host name
+#	hostDataVar			= hosts's keyed	list
+#	configKey			= data/reply config key
+#	itemName			= string describing data
+#
+# Notes:
+#	Unlike the simple checks, above, complex checks	may
+#	produce	multiple messages; as a	result,	they assume direct
+#	responsibility for adding messages to the warning list
+#
+proc CHD:checkTypeConfig { warnListVar symName
+			   hostDataVar configKey itemName } {
+    upvar $warnListVar warnList	$hostDataVar hostConfig
+
+    # echo CHD:checkTypeConfig $symName	$configKey
+
+    # Give up if one of	the keys isn't present
+    if { [keylget hostConfig $configKey	configList] == 0 } {
+	return
+    }
+
+    # echo configValue is '$configList'
+
+    keylget configList TYPE typeValue
+
+    switch -exact -- $typeValue	{
+        frl {
+	    set	procFound   [keylget configList	PROC   frProc]
+	    set	offlenFound [keylget configList	OFFLEN offLenVals]
+
+	    if { $procFound && $offlenFound } {
+		set    warnText	"$symName $itemName has	both "
+		append warnText	"Proc and offset/length	values"
+		lappend	warnList $warnText
+		return
+	    }
+
+	    if { $procFound } {
+		set frProcM [lindex $frProc 0]
+		if [CHD:badProc	$frProcM warnText] {
+		    lappend warnList	\
+			"$symName $itemName Transaction	proc: $warnText"
+		}
+	    }
+
+	    if { $offlenFound }	{
+		if [keylget configList OFFLEN offLenVals] {
+
+		    lassign {} offVal lenVal
+
+		    keylget offLenVals OFF offVal
+		    keylget offLenVals LEN lenVal
+
+		    if [CHD:notNumeric $lenVal pure warnText] {
+			lappend	warnList	\
+			    "$symName $itemName	Length:	$warnText"
+		    }
+
+		    if [CHD:notNumeric $offVal pure warnText] {
+			lappend	warnList	\
+			    "$symName $itemName	Offset:	$warnText"
+		    }
+		}
+	    }
+
+	    if { $procFound == $offlenFound } {
+		set warnText "$symName $itemName neither PROC nor OFFLEN found"
+		lappend	warnList $warnText
+	    }
+	}
+
+	vrl {
+	    set	procFound  [keylget configList PROC	vrProc]
+	    set	fieldFound [keylget configList FIELDNUM	vrFieldVal]
+	    set	tagFound   [keylget configList FIELDTAG	vrTagVal]
+	    set	sepFound   [keylget configList FIELDSEP	vrSepVal]
+	    set	escFound   [keylget configList FIELDESC	vrEscVal]
+
+	    if { $procFound } {
+		set vrProcM [lindex $vrProc 0]
+		if [CHD:badProc	$vrProcM warnText] {
+		    lappend warnList	\
+			"$symName $itemName Transaction	proc: $warnText"
+		}
+	    }
+
+	    if { $fieldFound } {
+		if [CHD:notNumeric $vrFieldVal pure warnText] {
+		    lappend warnList	\
+			"$symName $itemName Field Number: $warnText"
+		}
+	    }
+
+	    if { !$sepFound } {
+		lappend	warnList \
+		    "$symName $itemName	Field Separator: A single character field separator is required	for VRL."
+	    }
+
+	    if { $escFound } {
+		if { [clength $vrEscVal] != 2 }	{
+		    lappend warnList \
+			"$symName $itemName Escape Pair: Escape	pair must be exactly 2 characters."
+		}
+	    }
+
+	    # FIXME: Need to add more verification stuff...
+	}
+        # The following formats including HMD format has no addintional validation.
+        # Just make sure the format value saved in NetConfig file is a valid format.
+	xml {
+	}
+	xml_ns {
+	}
+	hl7 {
+	}
+	x12 {
+	}
+	edi {
+	}
+	swift {
+	}
+	ncpdp {
+	}
+	ncpdpfab {
+	}
+	ncpdpscript {
+	}
+	hprim {
+	}
+	grm {
+	}
+	dicom {
+	}
+	default	{
+	    lappend warnList	\
+		"$symName $itemName: '$typeValue' is an	illegal	value"
+	}
+ }
+}
+
+#######################################################################
+# CHD:checkPortConfig - check the given net	config have the inter-site routing port correctly set
+# Args:
+#	warnListVar			= warning list name
+#	symName				= host name
+#	hostDataVar			= hosts's keyed	list
+#
+# Notes:
+#	check both the icl server and destination
+#
+proc CHD:checkPortConfig { warnListVar symName hostDataVar } {
+    upvar			\
+	$warnListVar warnList	\
+	$hostDataVar hostConfig
+	
+	
+	if [keylget hostConfig CLOVERLEAF_INTERSITE_DEST isDes] {
+		set	warnString "$symName Destination"
+		if {[keylget hostConfig ICLDESPORT iclport]} {
+			set iclport [string trim $iclport]
+			set portlength [string length $iclport]
+			if { $portlength == 0 } {
+			lappend warnList "$warnString Inter-Site Routing Destination Port: empty"
+			return
+			}
+			if [CHD:badTcpPort $iclport	warnText] {
+			lappend	warnList "$warnString Inter-Site Routing Destination Port: $warnText"
+			}
+		}
+	} else {
+		set	warnString "$symName Protocol"
+		if {[keylget hostConfig ICLSERVERPORT iclport]} {
+			set iclport [string trim $iclport]
+			set portlength [string length $iclport]
+			if { $portlength == 0 } {
+			return
+			}
+			if [CHD:badTcpPort $iclport	warnText] {
+			lappend	warnList "$warnString Inter-Site Routing Port: $warnText"
+			}
+		}
+	}
+
+}
+
+#######################################################################
+# CHD:checkProtocolConfig - check the given net	config matches the type
+# Args:
+#	warnListVar			= warning list name
+#	symName				= host name
+#	hostDataVar			= hosts's keyed	list
+#
+# Notes:
+#	Unlike the simple checks, above, complex checks	may
+#	produce	multiple messages; as a	result,	they assume direct
+#	responsibility for adding messages to the warning list.
+#
+proc CHD:checkProtocolConfig { warnListVar symName hostDataVar } {
+    global HciSiteDir _CHDcheckProtocolConfigCode
+
+    upvar			\
+	$warnListVar warnList	\
+	$hostDataVar hostConfig
+
+    set	processExecDir "$HciSiteDir/exec/processes/"
+    if [keylget	hostConfig PROCESSNAME processName] {
+	append processExecDir $processName
+    }
+
+    set	warnString "$symName Protocol"
+
+    lassign {} protoList typeValue
+
+    keylget hostConfig PROTOCOL	protoList
+    keylget protoList  TYPE	typeValue
+
+    set	isPdl [string match pdl-* $typeValue]
+
+    set	boolList { 0 1 }
+
+    if [info exists _CHDcheckProtocolConfigCode($typeValue)] {
+	eval $_CHDcheckProtocolConfigCode($typeValue)
+    } else {
+	lappend	warnList "$symName: illegal protocol type '$typeValue'"
+	return
+    }
+
+    if { $isPdl	} {
+	# PDL-specific checks
+	#	PDLTYPE	must match expected value (set above)
+	#	PDLNAME	must exist
+
+	if [keylget protoList PDLTYPE pdlType] {
+	    if [string compare $pdlType	$pdlCheckType] {
+		set    warnText	"$warnString: PDLTYPE '$pdlType' "
+		append warnText	"is not	'$pdlCheckType'"
+
+		lappend	warnList $warnText
+	    }
+	} else {
+	    lappend warnList "$warnString: no PDLTYPE value"
+	}
+
+	if [keylget protoList PDLNAME pdlName] {
+	    if [CHD:badPdlName $pdlName	warnText] {
+		lappend	warnList "$warnString: $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no PDLNAME value"
+	}
+    }
+}
+
+
+#######################################################################
+# CHD:checkSmsConfig - Check the SMS entry
+# Args:
+#	warnListVar			= warning list name
+#	symName				= host name
+#	hostDataVar			= hosts's keyed	list
+#
+# Notes:
+#	unlike the simple checks, above, complex checks	may
+#	produce	multiple messages; as a	result,	they assume direct
+#	responsibility for adding messages to the warning list
+
+proc CHD:checkSmsConfig	{ warnListVar symName hostDataVar } {
+    upvar			\
+	$warnListVar warnList	\
+	$hostDataVar hostConfig
+
+    if [keylget	hostConfig SMS smsVal] {
+	CHD:checkTpsList warnList $symName smsVal FWD_DATA  "FWD data TPS"
+	CHD:checkTpsList warnList $symName smsVal FWD_REPLY "FWD reply TPS"
+	CHD:checkTpsList warnList $symName smsVal IN_DATA   "IB	data TPS"
+	CHD:checkTpsList warnList $symName smsVal IN_REPLY  "IB	reply TPS"
+	CHD:checkTpsList warnList $symName smsVal OUT_DATA  "OB	data TPS"
+	CHD:checkTpsList warnList $symName smsVal OUT_REPLY "OB	reply TPS"
+    }
+}
+
+
+#######################################################################
+# CHD:checkTpsList - Check a TPS config	list
+# Args:
+#	warnListVar			= warning list name
+#	symName				= host name
+#	tpsDataVar			= TPS keyed list
+#	strKey				= key to check
+#	strDesc				= description string
+#
+# Notes:
+#	unlike the simple checks, above, complex checks	may
+#	produce	multiple messages; as a	result,	they assume direct
+#	responsibility for adding messages to the warning list
+
+proc CHD:checkTpsList {	warnListVar symName tpsDataVar strKey strDesc }	{
+    upvar			\
+	$warnListVar warnList	\
+	$tpsDataVar  tpsData
+
+    if [keylget	tpsData	$strKey	listValue] {
+	if [keylget listValue PROCS listProcs] {
+	    set	prologue "$symName $strDesc"
+
+	    foreach strProc [lrmdups $listProcs] {
+		if [CHD:badProc	$strProc warnText] {
+		    lappend warnList "$prologue: $warnText"
+		}
+	    }
+	} else {
+	    lappend warnList "$symName:	no $strDesc proc list"
+	}
+
+	if [keylget listValue ARGS listArgs] {
+	    if [info exists listProcs] {
+		if { [llength $listProcs] != [llength $listArgs] } {
+		    lappend warnList	\
+			"$symName: $strDesc proc/args count mismatch"
+		}
+	    }
+	} else {
+	    lappend warnList "$symName:	no $strDesc args list"
+	}
+    } else {
+	lappend	warnList "$symName: no $strDesc"
+    }
+}
+
+
+#######################################################################
+# CHD:checkTranConfig -	check a	host's XACTION or REPLYXLATE config
+# Args:
+#	warnListVar			= warning list name
+#	symName				= host name
+#	hostDataVar			= hosts's keyed	list
+#	routeKey			= routing key
+#	configKey			= config key
+#	itemName			= string describing data
+#	typeListVar			= host data type list var
+#	symNameVar			= symname list
+#
+# Notes:
+#	unlike the simple checks, above, complex checks	may
+#	produce	multiple messages; as a	result,	they assume direct
+#	responsibility for adding messages to the warning list
+#
+proc CHD:checkTranConfig { warnListVar symName	hostDataVar routeKey
+			   configKey   itemName	typeListVar symNameVar } {
+    upvar				\
+	$warnListVar  warnList		\
+	$hostDataVar  hostConfig	\
+	$typeListVar  _CHDdataTypes	\
+	$symNameVar   _CHDsymNames
+
+    set	prologue "$symName $itemName:"			;# used	by all warnings
+
+    # Just give	up if we can't get the data we want
+    if { [keylget hostConfig $routeKey	routeList] == 0	||
+	 [keylget hostConfig $configKey	dataConf]  == 0	} {
+	return
+    }
+
+    # Dest for route should cover external destination for inter-site routing
+    global _ncfg_DestinationData
+    set RouteDestList $_CHDsymNames
+    foreach i [array names _ncfg_DestinationData] {
+	set	lowerName [string tolower $i]
+	    if { [lsearch RouteDestList	$lowerName] >= 0 } {
+		lappend	warnList "Route Destination '$i' not unique"
+	    } else {
+		lappend	RouteDestList $lowerName
+	    }
+    }
+    set	maxLength ""					;# assume not found
+    set	symName	[string	tolower	$symName]		;# Ignore case
+
+    # Try to get this host's data type to we can check names appropriately
+    if [keylget	_CHDdataTypes $symName dataType] {
+	if [cequal $dataType "Fixed"] {
+	    # Though CHD:checkTypeConfig{}, above, has (hopefully)
+	    # already parsed out and checked the data/reply config, we do
+	    # so again so we can check transaction/reply name lengths
+	    # against the (possibly) advertised	values.	 If we find the
+	    # OFFLEN key, but the length item is not pure-numeric, we
+	    # pretend we never found it	and proceed.
+
+	    if [keylget	dataConf OFFLEN	offlenVal] {
+		lassign	$offlenVal offVal lenVal
+
+		if [ctype digit	$lenVal] {
+		    set	maxLength $lenVal
+		}
+	    }
+	}
+    } else {
+	set dataType ""					;# not found
+    }
+
+    set	returnSoon 0					;# early termination
+
+    # Collect the TRXID	entries
+    lassign -1 entryNum	nameList
+    foreach i $routeList {
+	incr entryNum
+	if [keylget i TRXID nameVal] {
+	    lappend nameList $nameVal
+	} else {
+	    lappend warnList "$prologue	entry number $entryNum has no TRXID"
+	    set	returnSoon 1
+	}
+    }
+
+    # Check that the ones we got are unique (but flag repetitions only once)
+    lassign "" lastVal lastMatch
+    foreach i [lsort $nameList]	{
+	if { $i	== $lastVal && $i != $lastMatch	} {
+	    lappend warnList "$prologue	$i is not unique"
+	    set	lastMatch $i
+	    set	returnSoon 1
+	}
+	set lastVal $i
+    }
+
+    # If we've hit any snags to	this point, bail out
+
+    if { $returnSoon } {
+	return
+    }
+
+    # echo "TRXID checks OK"
+
+    # Now that we're sure we can uniquely identify each	one, we'll go
+    # back through the list and	examine	each one more closely.	Each should
+    # have TRXID and ROUTE_DETAILS keys.
+
+    foreach i $routeList {
+	if { [keylget i	TRXID curName] == 0 } {
+	    lappend warnList "$prologue: '$i' has no TRXID"
+	    continue
+	}
+
+	set prologue "$symName $itemName:"
+	if { $maxLength	!= "" && [clength $curName] > $maxLength &&
+	     $curName != "_HCI_static_route_" }	{
+	    lappend warnList	\
+	       "$prologue '$curName' is	longer than defined Length ($maxLength)"
+	}
+
+	# We should make sure we can find the message description
+	# for HL7 transactions here.  We'll need access	to the
+	# version and variant.
+
+	if { [keylget i	ROUTE_DETAILS curRouteList] == 0 } {
+	    lappend warnList "$prologue	$curName has no	ROUTE_DETAILS entry"
+	    continue
+	}
+
+	# PR-2067: make	sure the trxid has some	route details
+	if [lempty $curRouteList] {
+	    lappend warnList "$prologue	$curName has no	route details"
+	    continue
+	}
+
+	# Check	each sub-list's	TYPE key and other keys	as determined by TYPE
+
+	set routeNum 0
+	foreach	curRoute $curRouteList {
+	    set	prologue "$symName $itemName $curName route [incr routeNum]"
+
+	    if { [keylget curRoute TYPE	curType] == 0 }	{
+		lappend	warnList "$prologue: no	TYPE"
+		continue
+	    }
+
+	    set	curType	[string	tolower	$curType]
+
+	    switch -exact -- $curType {
+		generate {
+		    if [cequal $routeKey "REPLYXLATE"] {
+			lappend	warnList	\
+			    "$prologue:	Generate type not supported for	replies"
+			continue			;# next	curRoute
+		    }
+
+		    CHD:checkTpsList warnList $symName	\
+			curRoute PROCS "$prologue Procs"
+		}
+
+		xlate -
+		xslt -
+		raw {
+		    # RAW and XLATE share DEST checks
+
+		    if [keylget	curRoute DEST destList]	{
+			set destList [string tolower $destList]
+			if [lempty $destList] {
+			    lappend warnList	\
+				"$prologue: no Destination(s) specified"
+			}
+
+			set destDataTypeList {}
+			foreach	curDest	$destList {
+			    if [
+				CHD:badThreadName $curDest	\
+				    RouteDestList warnText
+			    ] {
+				lappend	warnList	\
+				    "$prologue Destination $warnText"
+			    }
+
+			    # Fetch the	destination's data type
+			    if  {![keylget _CHDdataTypes $curDest destDataType]} {
+				    set destDataType {}
+			    }
+			    # only count local process, remote dest has no DATAFORMAT.TYPE.
+			    if  {[lsearch $_CHDsymNames $curDest ] >= 0}  { 
+			        lappend destDataTypeList $destDataType
+			    }
+			}
+
+			set destDataTypeList [lrmdups $destDataTypeList]
+
+			if { [llength $destDataTypeList] > 1 } {
+			    lappend warnList	\
+				"$prologue: multiple destination data formats"
+			}
+		    } else {
+			lappend	warnList "$prologue: no	DEST"
+		    }
+
+		    if [cequal $curType	"xlate"] {
+			# XLATE	only:
+    			#	PREPROCS  elements must	be available
+    			#	POSTPROCS elements must	be available
+    			#	XLATE must be available
+    			#	(empty OK for HL7->HL7)
+			#	
+    
+    			CHD:checkTpsList warnList $symName	\
+    			    curRoute PREPROCS "$prologue Pre-procs"
+    
+    			CHD:checkTpsList warnList $symName	\
+    			    curRoute POSTPROCS "$prologue Post-procs"
+    
+    			if [keylget curRoute XLATE curXlate] {
+    			    if [lempty $curXlate] {
+        				# Empty	xlate file names are allowed
+        				# only for HL7 -> HL7.
+        				#
+        				# Perhaps this should also check
+        				# for the same variants?
+        
+        				if { [string compare $dataType "hl7"] ||
+        				     [string compare $destDataTypeList "hl7"]
+        				} {
+        				    lappend warnList	\
+        					"$prologue has no Translation file"
+        				}
+    			    } else {
+        				if [CHD:badXlateFile $curXlate warnText] {
+        				    lappend warnList	\
+        					"$prologue: Translation	file $warnText"
+        				}
+    			    }
+
+			    # We should	eventually cache input and output
+			    # types for	each xlation and check them here.
+    			} else {
+    			    lappend warnList "$prologue: no XLATE"
+    			}
+    			if [keylget curRoute ELEVATEWARNINGFORPARSE	curElevateWarn] {
+    			    if { ![lempty $curElevateWarn] && [lsearch { 0 1	} $curElevateWarn] < 0 } {
+			            lappend	warnList	\
+			            "$prologue: 'ELEVATEWARNINGFORPARSE' must be 0,1 or empty"
+		            }
+                } 
+                if [keylget curRoute READONLY	curReadOnly] {
+    			    if { ![lempty $curReadOnly] && [lsearch { 0 1	} $curReadOnly] < 0 } {
+			            lappend	warnList	\
+			            "$prologue: 'READONLY' must be 0,1 or empty"
+		            }
+                } 
+		        } else {
+		        if [cequal $curType	"xslt"] {
+		            # XSLT only:
+        			#	PREPROCS  elements must	be available
+        			#	POSTPROCS elements must	be available
+        			#	XSLT must be available
+        			
+		            CHD:checkTpsList warnList $symName	\
+    			        curRoute PREPROCS "$prologue Pre-procs"
+    
+    			    CHD:checkTpsList warnList $symName	\
+    			        curRoute POSTPROCS "$prologue Post-procs"
+    			    
+    			    if [keylget curRoute XSLT curXslt] {
+        			    if [lempty $curXslt] {
+        				    lappend warnList	\
+        					"$prologue has no Transformation file"
+        			    } else {
+            				if [CHD:badXsltFile $curXslt warnText] {
+            				    lappend warnList	\
+            					"$prologue: Transformation	file $warnText"
+            				}
+        			    }
+        			} else {
+        			    lappend warnList "$prologue: no XSLT"
+        			}
+		        } else {
+        			# RAW only:
+        			#	PROCS  elements	must be	available
+        
+        			CHD:checkTpsList warnList $symName curRoute	\
+        			    PROCS "$prologue Procs"
+        		}
+		    }
+		}
+
+		
+		array -
+		branch_array {
+		# just bypass array and brach_array checking.
+		# parsing will be done in engine xlate route loading.
+		}
+		
+		default	{
+		    lappend warnList	\
+			"$prologue: TYPE '$curType' is bogus"
+		}
+	    }
+	}
+    }
+}
+
+
+#######################################################################
+# CHD:badDecNode - check the validity of a DECnet node name
+# Args:
+#	checkValue			= value	to be checked
+#	warnTextVar			= warning text variable
+# Returns:	0	= profile is OK
+#		1	= profile is bad
+#
+
+proc CHD:badDecNode { checkValue warnTextVar } {
+    upvar $warnTextVar warnText
+
+    if { [lsearch [listDecNodes] $checkValue] <	0 } {
+	set warnText "cannot find DECnet node '$checkValue'"
+	return 1
+    } else {
+	return 0
+    }
+}
+
+
+#######################################################################
+# CHD:badDevice	- check	the validity of	a device file
+# Args:
+#	checkValue			= value	to be checked
+#	warnTextVar			= warning text variable
+# Returns:	0	= device is OK
+#		1	= device is bad
+#
+
+proc CHD:badDevice { checkValue	warnTextVar } {
+    upvar $warnTextVar warnText
+
+    if {[windows_platform]} {
+	set comPort $checkValue
+	if [catch {exec	mode $comPort} msg] {
+	    if [string match "Illegal device name*" $msg] {
+		set warnText "$comPort does not	exist"
+		return 1
+	    }
+	}
+	return 0					;# must	be OK
+    } else {
+	set devFile /dev/$checkValue
+	if [file exists	$devFile] {
+	    set	fileType [file type $devFile]
+
+	    if [string compare $fileType characterSpecial] {
+		set warnText "$devFile is not a	characterSpecial file"
+		return 1
+	    }
+	} else {
+	    set	warnText "$devFile does	not exist"
+	    return 1
+	}
+	return 0					;# must	be OK
+    }
+}
+
+
+#######################################################################
+# CHD:badLuItem	- check	the validity of	a PDL name
+# Args:
+#	luType		= LU type (e.g., 6.2)
+#	itemType	= item type (e.g., 'profile', 'tpn', or	'rtpn')
+#	checkValue	= value	to be checked
+#	warnTextVar	= warning text variable
+# Returns:	0	= profile is OK
+#		1	= profile is bad
+#
+
+proc CHD:badLuItem { luType itemType checkValue	warnTextVar } {
+    upvar $warnTextVar warnText
+    global tcl_platform	    
+
+    return 0
+
+    # ELu, 2/17/2000, HUBad04736
+    # There is no need to verify the profile and such per discussion
+    # with Rob Abbott. The APPC	protocol driver	will handle the	verification of	profile.
+    # The "unable to obtain libodm lock" from exportsna	will prevent thread starting.
+
+    #
+    #	if {[windows_platform] || $tcl_platform(os) == "SunOS"}	{
+    #		return 0
+    #	}
+    #	# AIX, Comm Server - no	checking
+    #	if { ![file exists /usr/bin/exportsna] } {
+    #		return 0
+    #	}
+    #	if { [lsearch [listLuItems $luType $itemType snaType] $checkValue] < 0 } {
+    #		if { [cequal $snaType server] && [cequal $itemType rtpn] } {
+    #		    # PR-1980: SNA Server/6000 defines RTPNs dynamically -- pretend
+    #		    #	       it's ok
+    #		    return 0
+    #		}
+    #	
+    #		set warnText "cannot find $luType $itemType '$checkValue'"
+    #		return 1
+    #	} else {
+    #		return 0
+    #	}
+}
+
+
+#######################################################################
+# CHD:badPdlName - check the validity of a PDL name
+# Args:
+#	checkValue			= value	to be checked
+#	warnTextVar			= warning text variable
+# Returns:
+#	0	= PDL exists
+#	1	= PDL doesn't exist
+#
+proc CHD:badPdlName { checkValue warnTextVar } {
+    upvar $warnTextVar warnText
+
+    set	origValue $checkValue
+
+    if { ![string match	*.pdl $checkValue] } {
+	append checkValue .pdl
+    }
+
+    if { [lsearch [listPdlScripts] $checkValue]	< 0 } {
+	set warnText "cannot find PDL '$origValue'"
+	return 1
+    } else {
+	return 0
+    }
+}
+
+
+#######################################################################
+# CHD:checkTcpHostIPv6 - check an IPv6 address
+# Args:
+#	checkValue			= value	to be checked
+#	dual				= if "IPv4/v6 Dual" is checked
+#	warnTextVar			= warning text variable
+# Returns:
+#	0	= not an IPv6 address
+#	1	= is an IPv6 address
+#
+proc CHD:checkTcpHostIPv6 { checkValue dual warnTextVar } {
+    upvar $warnTextVar warnText
+
+    set warnText ""
+    if {[string first ":" $checkValue] != -1} {
+	if { $dual == 0} {
+	    set warnText "\"IPv4/v6 Dual\" must be checked to use IPv6 address"
+	}
+	return 1
+    }
+    return 0
+}
+
+
+#######################################################################
+# CHD:badTcpHost - check a TCP/IP host name or address
+# Args:
+#	checkValue			= value	to be checked
+#	warnTextVar			= warning text variable
+# Returns:
+#	0	= hostname exists
+#	1	= hostname doesn't exist
+#
+proc CHD:badTcpHost { checkValue warnTextVar } {
+    global tcl_platform noNslookup
+    upvar $warnTextVar warnText
+
+    set	tcpAddrPttn {^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$}
+
+    if [regexp $tcpAddrPttn $checkValue] {
+	return 0
+    }
+
+    set nslook ""
+    
+    # If noNslookup hasn't be setted, initial it.
+    # The validation will exclude the DNS lookup
+    # unless it is done through hcinetcheck.
+    if [catch {set tmp $noNslookup}] {
+    set noNslookup 1
+    }
+
+    # skip DNS lookup for hostname verification
+    if { $noNslookup } {
+    return 0
+    }
+    
+    if {[regexp -nocase -- {Windows} $tcl_platform(os)] } {
+	catch {set nslook [exec nslookup $checkValue 2>NUL]}
+    } else {
+	catch {set nslook [exec nslookup $checkValue 2>/dev/null]}
+    }
+    
+	set nscheck "can\'t find $checkValue"
+    if { [regexp -nocase -- {Windows} $tcl_platform(os)] ||
+		[regexp -nocase -- {AIX} $tcl_platform(os)]     ||
+		[regexp -nocase -- {HP-UX} $tcl_platform(os)] } {
+            if { [lsearch [listTcpHosts] $checkValue] < 0 && ![regexp -- $checkValue $nslook]} {
+                set warnText "cannot find host '$checkValue'"
+                return 1
+            }
+            # AR8007, need also check the error. some AIX machine doesn't put error message to STDERR like hvsebel
+            if { [regexp -- $nscheck $nslook] } {
+                set warnText "cannot find host '$checkValue'"
+                return 1
+    	    }
+    } else {
+			if { [lsearch [listTcpHosts] $checkValue] < 0 && [regexp -- $nscheck $nslook] } {
+				set warnText "cannot find host '$checkValue'"
+				return 1
+    	}
+	}
+
+    return 0
+}
+
+
+#######################################################################
+# CHD:badTcpPort - check a TCP/IP service name or port number
+# Args:
+#	checkValue			= value	to be checked
+#	warnTextVar			= warning text variable
+# Returns:
+#	0	= file exists
+#	1	= file doesn't exist
+#
+proc CHD:badTcpPort { checkValue warnTextVar } {
+    upvar $warnTextVar warnText
+
+    if [ctype digit $checkValue] {
+        if {($checkValue < 1) || ($checkValue > 65535)} {
+            set warnText "invalid value '$checkValue', not in range of between 1 and 65535"
+            return 1
+        } 
+        return 0
+    }
+
+    # if one define a big number in service, we may suppose they purposely did it......
+    if { [lsearch [listTcpServices] $checkValue] < 0 } {
+        set warnText "cannot find service '$checkValue'"
+        return 1
+    } else {
+        return 0
+    }
+}
+
+
+#######################################################################
+# CHD:badXlateFile - check that	the given file exists in $HciSiteDir/Xlate
+# Args:
+#	checkValue			= value	to be checked
+#	warnTextVar			= warning text variable
+# Returns:
+#	0	= file exists
+#	1	= file doesn't exist
+#
+proc CHD:badXlateFile {	checkValue warnTextVar } {
+    global HciSiteDir
+
+    upvar $warnTextVar warnText
+
+    set	fileName [ExpandConfigFile $checkValue x]
+
+    if [file exists $fileName] {
+        if [file isfile	$fileName] {
+            return 0
+        } else {
+            set	warnText  "$fileName not a regular file"
+            return 1
+        }
+    } else {
+        set	fileName [ExpandConfigFile $checkValue x 0 master_site]
+        if { $fileName != "" } {
+            if [file exists $fileName] {
+                if [file isfile	$fileName] {
+                    return 0
+                } else {
+                    set	warnText  "$checkValue does not exist in site, and it is not a regular file in master site"
+                    return 1
+                }
+            } else {
+                set warnText "$checkValue does not exist in neither site nor master site"
+                return 1
+            }
+        } else {
+            set warnText "$checkValue does not exist in site, and no master site is defined"
+            return 1
+        }
+    }
+}
+
+#######################################################################
+# CHD:badXsltFile - check that	the given file exists in $HciSiteDir/Xslt
+#                   or $MasterSiteDir/Xslt
+# Args:
+#	checkValue			= value	to be checked
+#	warnTextVar			= warning text variable
+# Returns:
+#	0	= file exists
+#	1	= file doesn't exist
+#
+proc CHD:badXsltFile {	checkValue warnTextVar } {
+    global HciSiteDir
+
+    upvar $warnTextVar warnText
+
+    regsub -all {\\} $checkValue {/} checkValue
+    set	fileName [ExpandConfigFile $checkValue l]
+
+    if [file exists $fileName] {
+        if [file isfile	$fileName] {
+            return 0
+        } else {
+            set	warnText  "$fileName not a regular file"
+            return 1
+        }
+    } else {
+        set	fileName [ExpandConfigFile $checkValue l 0 master_site]
+        if { $fileName != "" } {
+            if [file exists $fileName] {
+                if [file isfile	$fileName] {
+                    return 0
+                } else {
+                    set	warnText  "$checkValue does not exist in site, and it is not a regular file in master site"
+                    return 1
+                }
+            } else {
+                set	fileName [ExpandConfigFile $checkValue l 0 root]
+				if [file exists $fileName] {
+					if [file isfile	$fileName] {
+						return 0
+					} else {
+						set warnText "$checkValue does not exist in site, master site, and it is not a regular file in root"
+						return 1
+					}
+				} else {
+					set warnText "$checkValue does not exist in site, master site or root"
+					return 1
+				}
+            }
+        } else {
+			set	fileName [ExpandConfigFile $checkValue l 0 root]
+            if [file exists $fileName] {
+				if [file isfile	$fileName] {
+					return 0
+				} else {
+					set	warnText  "$checkValue does not exist in site, no master site is defined, and it is not a regular file in root"
+					return 1
+				}
+			} else {
+				set	warnText  "$checkValue does not exist in site or root, and no master site is defined"
+				return 1
+			}
+        }
+    }
+}
+
+#####################################################################
+# CHD:notInList	- test a key's presence	& its value in a list
+# Args:		keyListVar	= keyed	list var
+#		key		= key to check
+#		validListVar	= valid	list var
+#		warnString	= warning base
+#		warnListVar	= warning list var
+# Returns:	non-zero if key	is present but value isn't in list
+# Notes:	If the key is not present or the value isn't in	the list,
+#		an appropriate entry is	added to warnList.
+#
+#		This proc really should	be more	widely used in here.
+#
+
+proc CHD:notInList { keyListVar	key validListVar warnString warnListVar	} {
+    upvar $keyListVar keyList $validListVar validList $warnListVar warnList
+
+    if [keylget	keyList	$key val] {
+	if { [lsearch $validList $val] < 0 } {
+	    lappend warnList "$warnString: invalid $key	value '$val'"
+	    return 1
+	}
+    } else {
+	lappend	warnList "$warnString: no $key value"
+    }
+
+    return 0
+}
+
+
+######################################################################
+######################################################################
+# One time only	code
+#
+# Set a	series of array	entries	that will contain the code to eval for
+# various operations in	the code above...
+#
+
+
+######################################################################
+# _CHDcheckProtocolConfigCode -	used by	CHD:checkProtocolConfig
+
+set _CHDcheckProtocolConfigCode(dicom) {
+    append warnString " DICOME protocol"
+    
+    set scpLoaded 1
+    set scuLoaded 1
+
+    # SCU option
+    # Check SCU LOCALAET
+    if {![keylget protoList SCU_LOCALAET sculocalAET]} {
+        set scuLoaded 0
+        append tmp "SCU Local AET is not defined."
+    } elseif { $sculocalAET == "" } {
+        set scuLoaded 0
+        append tmp "SCU Local AET is empty."
+    }
+    
+    # Check REMOTEAET
+    if {![keylget protoList SCU_REMOTEAET remoteAET]} {
+        set scuLoaded 0
+        append tmp "SCU Remote AET is not defined."
+    } elseif { $remoteAET == "" } {
+        set scuLoaded 0
+        append tmp "SCU Remote AET is empty."
+    }
+    
+    # Check REMOTEADDR
+    if {![keylget protoList SCU_REMOTEADDR remoteAddr]} {
+        set scuLoaded 0
+        append tmp "SCU Remote Address is not defined."
+    } elseif { $remoteAddr == "" } {
+        set scuLoaded 0
+        append tmp "SCU Remote Address is empty."
+    }
+
+    # Check REMOTEPORT
+    if [keylget protoList SCU_REMOTEPORT remotePort]    {
+        if [CHD:badTcpPort $remotePort warnText] {
+            set scuLoaded 0
+            append tmp "SCU Remote Port: $warnText."
+        }
+    } else {
+        set scuLoaded 0
+        append tmp "SCU Remote Port is not defined."
+    }
+  
+    # Check SCU_PRESCXT-ABSTSYNX
+    if {![keylget protoList SCU_PRESCXT-ABSTSYNX scuAS]} {
+        set scuLoaded 0
+        append tmp "SCU Abstract Syntax is not defined."
+    } elseif { $scuAS == "" } {
+        set scuLoaded 0
+        append tmp "SCU Abstract Syntax is empty."
+    }
+    
+    # Check SCU_PRESCXT-XFERSYNX
+    if {![keylget protoList SCU_PRESCXT-XFERSYNX scuTS]} {
+        set scuLoaded 0
+        append tmp "SCU Transfer Syntax is not defined."
+    } elseif { $scuTS == "" } {
+        set scuLoaded 0
+        append tmp "SCU Transfer Syntax is empty."
+    }
+    
+    # SCP option
+    # Check SCP LOCALAET
+    if {![keylget protoList SCP_LOCALAET localAET]} {
+        set scpLoaded 0
+        append tmp "SCP Local AET is not defined."
+    } elseif { $localAET == "" } {
+        set scpLoaded 0
+        append tmp "SCP Local AET is empty."
+    }
+    
+    # Check LOCALPORT
+    if [keylget protoList SCP_LOCALPORT localPort]    {
+        if [CHD:badTcpPort $localPort warnText] {
+            set scpLoaded 0
+            append tmp "SCP Local Port: $warnText."
+        }
+    } else {
+        set scpLoaded 0
+        append tmp "SCP Local Port is not defined."
+    }
+
+    # Check SCP_PRESCXT-ABSTSYNX
+    if {![keylget protoList SCP_PRESCXT-ABSTSYNX scpAS]} {
+        set scpLoaded 0
+        append tmp "SCP Abstract Syntax is not defined."
+    } elseif { $scpAS == "" } {
+        set scpLoaded 0
+        append tmp "SCP Abstract Syntax is empty."
+    }
+    
+    # Check SCP_PRESCXT-XFERSYNX
+    if {![keylget protoList SCP_PRESCXT-XFERSYNX scpTS]} {
+        set scpLoaded 0
+        append tmp "SCP Transfer Syntax is not defined."
+    } elseif { $scpTS == "" } {
+        set scpLoaded 0
+        append tmp "SCP Transfer Syntax is empty."
+    }
+    
+    if {!$scpLoaded && !$scuLoaded} {
+        lappend warnList "$warnString: Neither SCP option nor SCU option is configured correctly: $tmp"
+    }
+}
+
+set _CHDcheckProtocolConfigCode(java) {
+}
+
+set _CHDcheckProtocolConfigCode(database-inbound) {
+    append warnString " DB protocol inbound"
+
+    CHD:dbProtocolSetting $protoList $warnString warnList
+
+    # check CONN_NEEDED
+    if {[keylget protoList CONN_NEEDED connNeeded]} {
+        if {[CHD:notNumeric $connNeeded pure warnText] } {
+            lappend warnList "$warnString CONN_NEEDED: $warnText"
+        } else {
+            if {($connNeeded != 0) && ($connNeeded != 1)} {
+                lappend warnList "$warnString: CONN_NEEDED should be 0 or 1"
+            }
+        }
+    }
+
+    # check MSG_PER_READ
+    if {[keylget protoList MSG_PER_READ msgPerRead]} {
+        if {[CHD:notNumeric $msgPerRead pure warnText] } {
+            lappend warnList "$warnString MSG_PER_READ: $warnText"
+        } else {
+            if {($msgPerRead != 0) && ($msgPerRead != 1)} {
+                lappend warnList "$warnString: MSG_PER_READ should be 0 or 1"
+            }
+        }
+    } else {
+        lappend warnList "$warnString: MSG_PER_READ cannot be empty"
+    }
+
+    # Check MAX_ROW
+    if {[keylget protoList MAX_ROW maxRow]} {
+        if {[CHD:notNumeric $maxRow pure warnText] } {
+            lappend warnList "$warnString MAX_ROW: $warnText"
+        }
+    } else {
+        lappend warnList "$warnString: MAX_ROW cannot be empty"
+    }
+    
+    #check scan interval
+    if {[keylget protoList SCAN_INTERVAL scanInterval] && ![cequal $scanInterval {}]} {
+        if {[CHD:notNumeric $scanInterval pure warnText] } {
+            lappend warnList "$warnString SCAN_INTERVAL: $warnText"
+        } 
+    } else {
+		if {![keylget hostConfig SCHEDULE schedule] || [cequal $schedule {}]} {
+			lappend warnList "$warnString: Must have SCHEDULE when SCAN_INTERVAL is empty"
+		}
+    }
+
+    # Check IB_ACTION
+    if {[keylget protoList IB_ACTION ibAction]} {
+        CHD:dbActionSetting $ibAction IB_ACTION $warnString 1 warnList
+    } else {
+        lappend warnList "$warnString: IB_ACTION cannot be empty"
+    }
+
+    # Check IB_FAILURE_ACTION
+    if {[keylget protoList IB_FAILURE_ACTION ibFailureAction]} {
+        CHD:dbActionSetting $ibFailureAction IB_FAILURE_ACTION $warnString 0 warnList 
+    }
+
+    # Check IB_SUCCESS_ACTION
+    if {[keylget protoList IB_SUCCESS_ACTION ibSuccessAction]} {
+        CHD:dbActionSetting $ibSuccessAction IB_SUCCESS_ACTION $warnString 0 warnList
+    }
+
+    if {[keylget protoList JAVA java]} {
+        if {[keylget java DRIVER driver]} {
+            # Check CLASS
+            if {[keylget driver CLASS class]} {
+                if {![cequal $class {com.lawson.cloverleaf.dbprotocol.CJDDBProtocolIB}]} {
+                    lappend warnList "$warnString JAVA DRIVER: CLASS should be 'com.lawson.cloverleaf.dbprotocol.CJDDBProtocolIB'"
+                }
+            } else {
+                lappend warnList "$warnString JAVA DRIVER: CLASS cannot be empty"
+            }
+            # Check TIMEMETHOD
+            if {[keylget driver TIMEMETHOD timeMethod]} {
+                if {![cequal $timeMethod {doTimeEvent}]} {
+                    lappend warnList "$warnString JAVA DRIVER: TIMEMETHOD should be 'doTimeEvent'"
+                }
+            } else {
+                lappend warnList "$warnString JAVA DRIVER: TIMEMETHOD cannot be empty"
+            }
+        }
+    }
+}
+
+set _CHDcheckProtocolConfigCode(database-outbound) {
+    append warnString "    DB protocol outbound"
+
+    CHD:dbProtocolSetting $protoList $warnString warnList
+    # Check OB_ACTION
+    if {[keylget protoList OB_ACTION obAction]} {
+        CHD:dbActionSetting $obAction OB_ACTION $warnString 1 warnList
+
+        # check USECACHEMSG
+        if {[keylget obAction USECACHEMSG useCacheMsg]} {
+            if {[CHD:notNumeric $useCacheMsg pure warnText] } {
+                lappend warnList "$warnString USECACHEMSG: $warnText"
+            } else {
+                if {($useCacheMsg != 0) && ($useCacheMsg != 1)} {
+                    lappend warnList "$warnString: USECACHEMSG should be 0 or 1"
+                }
+            }
+        }
+
+    } else {
+        lappend warnList "$warnString: OB_ACTION cannot be empty"
+    }
+
+    if {[keylget protoList JAVA java]} {
+        if {[keylget java DRIVER driver]} {
+            # Check CLASS
+            if {[keylget driver CLASS class]} {
+                if {![cequal $class {com.lawson.cloverleaf.dbprotocol.CJDDBProtocolOB}]} {
+                    lappend warnList "$warnString JAVA DRIVER: CLASS should be 'com.lawson.cloverleaf.dbprotocol.CJDDBProtocolOB'"
+                }
+            } else {
+                lappend warnList "$warnString JAVA DRIVER: CLASS cannot be empty"
+            }
+            # Check RUNMETHOD
+            if {[keylget driver RUNMETHOD runMethod]} {
+                if {![cequal $runMethod {doMsg}]} {
+                    lappend warnList "$warnString JAVA DRIVER: RUNMETHOD should be 'doMsg'"
+                }
+            } else {
+                lappend warnList "$warnString JAVA DRIVER: RUNMETHOD cannot be empty"
+            }
+        }
+    }
+    
+    # check DBPCLOSE
+    if {[keylget protoList DBPCLOSE dbpClose]} {
+        if {[CHD:notNumeric $dbpClose pure warnText] } {
+            lappend warnList "$warnString DBPCLOSE: $warnText"
+        } else {
+            if {($dbpClose != 0) && ($dbpClose != 1)} {
+                lappend warnList "$warnString: DBPCLOSE should be 0 or 1"
+            }
+        }
+    }
+    
+    # check DBPDELAY
+    if {[keylget protoList DBPDELAY dbpDelay]} {
+        if {[CHD:notNumeric $dbpDelay pure warnText] } {
+            lappend warnList "$warnString DBPDELAY: $warnText"
+        } else {
+            if {($dbpDelay != 0) && ($dbpDelay != 1)} {
+                lappend warnList "$warnString: DBPDELAY should be 0 or 1"
+            }
+        }
+    }
+
+    
+}
+
+set _CHDcheckProtocolConfigCode(mqs) {
+    append warnString "	MQS"
+
+    # check read interval
+    if {[keylget protoList READINTERVAL	readInterval]} {
+	CHD:notNumeric $readInterval pure warnText
+    }
+    
+    #check the MQS port
+    if [keylget	protoList MQSPORT mqsPort]	{
+        if {![lempty $mqsPort]} {
+            if [CHD:badTcpPort $mqsPort warnText] {
+                lappend warnList "$warnString Port:	$warnText"
+            }
+        }
+    }
+
+    # Check QMGRNAME
+    CHD:checkKeyLen protoList QMGRNAME "Queue Manager Name" \
+	     1 44 warnString warnText
+
+    # Check QNAME
+    CHD:checkKeyLen protoList QNAME "Queue Name" 1 44 $warnString warnText
+
+    # Check MAXMSG
+    if {[keylget protoList MAXMSG maxmsg]} {
+	CHD:notNumeric $maxmsg pure warnText
+    }
+}
+
+
+set _CHDcheckProtocolConfigCode(http-client) {
+    append warnString "	HTTP Client"
+
+    # check URL
+    if {[keylget protoList URL url]} {
+	if {[regexp {://([^/]+?)(:[0-9]+)?/} $url match host]} {
+	    if {[string first ":" $host] != -1} {	# IPv6 address
+		if {[string index $host 0] != "\["
+		    || [string index $host end] != "\]" } {
+		    lappend warnList "$warnString input URL: IPv6 address should be enclosed by \[\]"
+		}
+		if {[string first "%" $host] != -1} {	# scope ID
+		    lappend warnList "$warnString input URL: Scope ID in IPv6 address is not supported"
+		}
+	    }
+	}
+    }
+
+    # check query_interval
+   if {[cequal $[keylget protoList IS_TIMED_QUERY queryFlag] 1] } {
+   if {[keylget protoList QUERY_INTERVAL queryInterval]} {
+	if {[CHD:notNumeric $queryInterval pure warnText] } {
+	    lappend warnList "$warnString input QUERY_INTERVAL: $warnText"
+	}
+    }
+    }
+    
+    # check is_auth
+    if {[keylget protoList IS_AUTH isAuth]} {
+        if {![lempty $isAuth]} {
+            if {[CHD:notNumeric $isAuth pure warnText] } {
+                lappend warnList "$warnString input IS_AUTH: $warnText"
+            }
+        }
+    }
+
+    # check is_https
+    if {[keylget protoList IS_HTTPS isHttps]} {
+        if {![lempty $isHttps]} {
+            if {[CHD:notNumeric $isHttps pure warnText] } {
+                lappend warnList "$warnString input IS_HTTPS: $warnText"
+            }
+        }
+    }
+
+    # check is_timed
+    if {[keylget protoList IS_TIMED_QUERY isTimed]} {
+        if {![lempty $isTimed]} {
+            if {[CHD:notNumeric $isTimed pure warnText] } {
+                lappend warnList "$warnString input IS_TIMED_QUERY: $warnText"
+            }
+        }
+    }
+
+    # check query_tps
+    if {[keylget protoList QUERY_TPS querytps]} {
+        if {![cequal $querytps {}]} {
+	    CHD:checkTpsList warnList $symName protoList \
+	        QUERY_TPS  "Query TPS"
+        }
+    }
+
+    # AR6612, MODE check
+    set	modeList { {} ClientAnon ClientAuth Client ServerAnon ServerAuth Server}
+    if {[keylget protoList IS_HTTPS isHttps]} {
+        if {![lempty $isHttps]} {
+            if {$isHttps} {
+                CHD:notInList protoList MODE modeList $warnString warnList
+            }
+        }
+    }
+
+    # check if all security files are readable
+    foreach key {CA_FILE CA_PATH CERT_FILE PRIVATE_KEY} { 
+        keylget protoList $key path
+        if {![cequal $path {}]} {
+            if { [ file pathtype $path ] == "relative" } {
+                set path $processExecDir/$path		;# raw
+            }
+
+            if {![file readable $path]} {
+                set warnText "$key value '$path' is not readable."
+                lappend warnList "$warnString: $warnText"
+            }
+        }
+    }
+
+    
+    # check the validity of the proxy option
+    keylget protoList PROXY proxy  
+    if [keylget proxy HOST proxyHost]	{
+        if [CHD:badTcpHost $proxyHost warnText] {
+            lappend warnList "$warnString Host:	$warnText"
+        }
+    }
+    if [keylget proxy PORT proxyPort]	{
+        if {![lempty $proxyPort]} {
+            if [CHD:badTcpPort $proxyPort warnText] {
+                lappend warnList "$warnString Port:	$warnText"
+            }
+        }
+    }
+
+
+    # check the validity of cURL option
+    CHD:curlOptions protoList $warnString warnList
+}
+
+
+set _CHDcheckProtocolConfigCode(upoc) {
+    append warnString "	UPoC"
+
+    # check read interval
+    if {[keylget protoList READINTERVAL	readInterval]} {
+	if {[CHD:notNumeric $readInterval pure warnText] } {
+	    lappend warnList "$warnString input	delay: $warnText"
+	}
+    }
+
+    # Check READTPS
+    if {[keylget protoList READTPS readtps]} {
+	CHD:checkTpsList warnList $symName protoList	\
+	    READTPS  "Read TPS"
+    }
+
+    # Check WRITETPS
+    if {[keylget protoList WRITETPS writetps]} {
+	CHD:checkTpsList warnList $symName protoList	\
+	    WRITETPS  "Write TPS"
+    }
+}
+
+set _CHDcheckProtocolConfigCode(fileset) {
+    # FIXME: we	don't check the	TPS foo...
+    
+    global platformcap
+
+    set	boolList {0 1}
+    CHD:notInList protoList OBAPPEND boolList $warnString warnList
+
+    set protocol Fileset ; keylget protoList PROTOCOL protocol
+    set mode     ""      ; keylget protoList MODE     mode
+    append warnString "	$protocol/$mode"
+
+    # inbound 
+    keylget protoList IBDIR    ibdir
+    if {![cequal $ibdir	{}]} {
+	if { [ file pathtype $ibdir ] != "relative" } {
+	    # Use raw path if it looks absolute:
+	    #	starts with '/'			(UN*X and/or NT)
+	    #	starts with '<letter>:/'	(NT only)
+	    #
+	    # FIXME: these checks probably ought to be in a
+	    # 'isabsolute' proc	or something (see popProtoConfig.tcl).
+	    set	ibpath $ibdir				;# absolute
+	} else {
+	    set	ibpath $processExecDir/$ibdir		;# raw
+	}
+
+	if {![file isdirectory $ibpath]} {
+	    set	   warnText "IB	directory '$ibpath' is not a directory."
+	    lappend warnList "$warnString: $warnText"
+
+	} elseif {![file readable $ibpath]} {
+	    set	   warnText "IB	directory '$ibpath' is not readable."
+	    lappend warnList "$warnString: $warnText"
+
+	} elseif {![file writable $ibpath]} {
+	    set	   warnText "IB	directory '$ibpath' is not writable."
+	    lappend warnList "$warnString: $warnText"
+	}
+
+	# PR-3136: check IBMAXMSGS
+	if [keylget protoList IBMAXMSGS	ibmaxmsgs] {
+	    if {[CHD:notNumeric	$ibmaxmsgs positive warnText]} {
+		lappend	warnList "$warnString Max Messages : $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no IBMAXMSGS	value"
+	}
+
+	if [keylget protoList IBSCANINTERVAL ibscaninterval] {
+	    if {[CHD:notNumeric	$ibscaninterval	positive warnText]} {
+		lappend	warnList "$warnString Inbound Scan Interval: $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no IBSCANINTERVAL value"
+	}
+
+	if [keylget protoList IBREADINTERVAL ibreadinterval] {
+	    if {[CHD:notNumeric	$ibreadinterval	positive warnText]} {
+		lappend	warnList "$warnString Inbound Read Interval: $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no IBREADINTERVAL value"
+	}
+    }
+
+    # outbound
+    keylget protoList OBDIR obdir
+    if {![cequal $obdir	{}]} {
+	if { [ file pathtype $obdir ] != "relative" } {
+	    # See $ibdir checks, above
+	    set	obpath $obdir				;# absolute
+	} else {
+	    set	obpath $processExecDir/$obdir		;# raw
+	}
+
+	if {![file isdirectory $obpath]} {
+	    set	   warnText "OB	directory '$obpath' is not a directory."
+	    lappend warnList "$warnString: $warnText"
+
+	} elseif {![file readable $obpath]} {
+	    set	   warnText "OB	directory '$obpath' is not readable."
+	    lappend warnList "$warnString: $warnText"
+
+	} elseif {![file writable $obpath]} {
+	    set	   warnText "OB	directory '$obpath' is not writable."
+	    lappend warnList "$warnString: $warnText"
+	}
+    }
+
+    # FTP-only checks
+    keylget protoList MODE mode
+    if {[cequal	$mode "ftp"]} {
+
+	CHD:notInList protoList	FTPCLOSE boolList $warnString warnList
+	CHD:notInList protoList	FTPDELAY boolList $warnString warnList
+
+	if {[keylget protoList FTPHOST ftphost]} {
+	    if {[string first ":" $ftphost] != -1} {	 # IPv6 address
+		if {[string first "%" $ftphost] != -1} { # with scope ID
+		    lappend warnList "$warnString Host: Scope ID in IPv6 address is not supported"
+		}
+	    } else {
+		if [CHD:badTcpHost $ftphost	warnText] {
+		    lappend	warnList "$warnString Host: $warnText"
+		}
+	    }
+	} else {
+	    lappend warnList "$warnString: no HOST value"
+	}
+
+	if {[keylget protoList FTPPORT ftpport]} {
+	    if [CHD:badTcpPort $ftpport	warnText] {
+		lappend	warnList "$warnString Port: $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no PORT value"
+	}
+
+	if {[keylget protoList FTPUSER ftpuser]} {
+	    if [lempty $ftpuser] {
+		lappend	warnList "$warnString: Login: is empty"
+	    }
+	} else {
+	    lappend warnList "$warnString: no Login: value"
+	}
+    }
+    
+    # check the validity of cURL option
+    CHD:curlOptions protoList $warnString warnList
+}
+
+############################
+# FTPS config validation
+############################
+set _CHDcheckProtocolConfigCode(fileset-ftps) {
+    # FIXME: we	don't check the	TPS foo...
+   
+    global platformcap
+
+    set	boolList {0 1}
+    CHD:notInList protoList OBAPPEND boolList $warnString warnList
+
+    set protocol Fileset ; keylget protoList PROTOCOL protocol
+    set mode     ""      ; keylget protoList MODE     mode
+    append warnString "	$protocol/$mode"
+
+    # inbound 
+    keylget protoList IBDIR    ibdir
+    if {![cequal $ibdir	{}]} {
+	if { [ file pathtype $ibdir ] != "relative" } {
+	    # Use raw path if it looks absolute:
+	    #	starts with '/'			(UN*X and/or NT)
+	    #	starts with '<letter>:/'	(NT only)
+	    #
+	    # FIXME: these checks probably ought to be in a
+	    # 'isabsolute' proc	or something (see popProtoConfig.tcl).
+	    set	ibpath $ibdir				;# absolute
+	} else {
+	    set	ibpath $processExecDir/$ibdir		;# raw
+	}
+
+	if {![file isdirectory $ibpath]} {
+	    set	   warnText "IB	directory '$ibpath' is not a directory."
+	    lappend warnList "$warnString: $warnText"
+
+	} elseif {![file readable $ibpath]} {
+	    set	   warnText "IB	directory '$ibpath' is not readable."
+	    lappend warnList "$warnString: $warnText"
+
+	} elseif {![file writable $ibpath]} {
+	    set	   warnText "IB	directory '$ibpath' is not writable."
+	    lappend warnList "$warnString: $warnText"
+	}
+
+	# PR-3136: check IBMAXMSGS
+	if [keylget protoList IBMAXMSGS	ibmaxmsgs] {
+	    if {[CHD:notNumeric	$ibmaxmsgs positive warnText]} {
+		lappend	warnList "$warnString Max Messages : $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no IBMAXMSGS	value"
+	}
+
+	if [keylget protoList IBSCANINTERVAL ibscaninterval] {
+	    if {[CHD:notNumeric	$ibscaninterval	positive warnText]} {
+		lappend	warnList "$warnString Inbound Scan Interval: $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no IBSCANINTERVAL value"
+	}
+
+	if [keylget protoList IBREADINTERVAL ibreadinterval] {
+	    if {[CHD:notNumeric	$ibreadinterval	positive warnText]} {
+		lappend	warnList "$warnString Inbound Read Interval: $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no IBREADINTERVAL value"
+	}
+    }
+
+    # outbound
+    keylget protoList OBDIR obdir
+    if {![cequal $obdir	{}]} {
+	if { [ file pathtype $obdir ] != "relative" } {
+	    # See $ibdir checks, above
+	    set	obpath $obdir				;# absolute
+	} else {
+	    set	obpath $processExecDir/$obdir		;# raw
+	}
+
+	if {![file isdirectory $obpath]} {
+	    set	   warnText "OB	directory '$obpath' is not a directory."
+	    lappend warnList "$warnString: $warnText"
+
+	} elseif {![file readable $obpath]} {
+	    set	   warnText "OB	directory '$obpath' is not readable."
+	    lappend warnList "$warnString: $warnText"
+
+	} elseif {![file writable $obpath]} {
+	    set	   warnText "OB	directory '$obpath' is not writable."
+	    lappend warnList "$warnString: $warnText"
+	}
+    }
+
+    # FTP-only checks
+    keylget protoList MODE mode
+    if {[cequal	$mode "ftps"]} {
+
+	CHD:notInList protoList	FTPCLOSE boolList $warnString warnList
+	CHD:notInList protoList	FTPDELAY boolList $warnString warnList
+
+	if {[keylget protoList FTPHOST ftphost]} {
+	    if {[string first ":" $ftphost] != -1} {	 # IPv6 address
+		if {[string first "%" $ftphost] != -1} { # with scope ID
+		    lappend warnList "$warnString Host: Scope ID in IPv6 address is not supported"
+		}
+	    } else {
+		if [CHD:badTcpHost $ftphost	warnText] {
+		    lappend	warnList "$warnString Host: $warnText"
+		}
+	    }
+	} else {
+	    lappend warnList "$warnString: no HOST value"
+	}
+
+	if {[keylget protoList FTPPORT ftpport]} {
+	    if [CHD:badTcpPort $ftpport	warnText] {
+		lappend	warnList "$warnString Port: $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no PORT value"
+	}
+
+	if {[keylget protoList FTPUSER ftpuser]} {
+	    if [lempty $ftpuser] {
+		lappend	warnList "$warnString: Login: is empty"
+	    }
+	} else {
+	    lappend warnList "$warnString: no Login: value"
+	}
+
+        # AR6612, SSLMODE check
+        set modeList { {} None Anonymous ClientAnon ClientAuth Client ClientServerAuth ClientServer}
+        CHD:notInList protoList SSLMODE modeList $warnString warnList
+    }
+
+    # check the validity of cURL option
+    CHD:curlOptions protoList $warnString warnList
+}
+# END FTPS
+
+############################
+# SFTP config validation
+############################
+set _CHDcheckProtocolConfigCode(fileset-sftp) {
+    # FIXME: we	don't check the	TPS foo...
+   
+    global platformcap
+
+    set	boolList {0 1}
+    CHD:notInList protoList OBAPPEND boolList $warnString warnList
+
+    set protocol Fileset ; keylget protoList PROTOCOL protocol
+    set mode     ""      ; keylget protoList MODE     mode
+    append warnString "	$protocol/$mode"
+
+    # inbound 
+    keylget protoList IBDIR    ibdir
+    if {![cequal $ibdir	{}]} {
+	if { [ file pathtype $ibdir ] != "relative" } {
+	    # Use raw path if it looks absolute:
+	    #	starts with '/'			(UN*X and/or NT)
+	    #	starts with '<letter>:/'	(NT only)
+	    #
+	    # FIXME: these checks probably ought to be in a
+	    # 'isabsolute' proc	or something (see popProtoConfig.tcl).
+	    set	ibpath $ibdir				;# absolute
+	} else {
+	    set	ibpath $processExecDir/$ibdir		;# raw
+	}
+
+	if {![file isdirectory $ibpath]} {
+	    set	   warnText "IB	directory '$ibpath' is not a directory."
+	    lappend warnList "$warnString: $warnText"
+
+	} elseif {![file readable $ibpath]} {
+	    set	   warnText "IB	directory '$ibpath' is not readable."
+	    lappend warnList "$warnString: $warnText"
+
+	} elseif {![file writable $ibpath]} {
+	    set	   warnText "IB	directory '$ibpath' is not writable."
+	    lappend warnList "$warnString: $warnText"
+	}
+
+	# PR-3136: check IBMAXMSGS
+	if [keylget protoList IBMAXMSGS	ibmaxmsgs] {
+	    if {[CHD:notNumeric	$ibmaxmsgs positive warnText]} {
+		lappend	warnList "$warnString Max Messages : $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no IBMAXMSGS	value"
+	}
+
+	if [keylget protoList IBSCANINTERVAL ibscaninterval] {
+	    if {[CHD:notNumeric	$ibscaninterval	positive warnText]} {
+		lappend	warnList "$warnString Inbound Scan Interval: $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no IBSCANINTERVAL value"
+	}
+
+	if [keylget protoList IBREADINTERVAL ibreadinterval] {
+	    if {[CHD:notNumeric	$ibreadinterval	positive warnText]} {
+		lappend	warnList "$warnString Inbound Read Interval: $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no IBREADINTERVAL value"
+	}
+    }
+
+    # outbound
+    keylget protoList OBDIR obdir
+    if {![cequal $obdir	{}]} {
+	if { [ file pathtype $obdir ] != "relative" } {
+	    # See $ibdir checks, above
+	    set	obpath $obdir				;# absolute
+	} else {
+	    set	obpath $processExecDir/$obdir		;# raw
+	}
+
+	if {![file isdirectory $obpath]} {
+	    set	   warnText "OB	directory '$obpath' is not a directory."
+	    lappend warnList "$warnString: $warnText"
+
+	} elseif {![file readable $obpath]} {
+	    set	   warnText "OB	directory '$obpath' is not readable."
+	    lappend warnList "$warnString: $warnText"
+
+	} elseif {![file writable $obpath]} {
+	    set	   warnText "OB	directory '$obpath' is not writable."
+	    lappend warnList "$warnString: $warnText"
+	}
+    }
+
+    # FTP-only checks
+    keylget protoList MODE mode
+    if {[cequal	$mode "sftp"]} {
+
+	CHD:notInList protoList	FTPCLOSE boolList $warnString warnList
+	CHD:notInList protoList	FTPDELAY boolList $warnString warnList
+
+	if {[keylget protoList FTPHOST ftphost]} {
+	    if {[string first ":" $ftphost] != -1} {	 # IPv6 address
+		if {[string first "%" $ftphost] != -1} { # with scope ID
+		    lappend warnList "$warnString Host: Scope ID in IPv6 address is not supported"
+		}
+	    } else {
+		if [CHD:badTcpHost $ftphost	warnText] {
+		    lappend	warnList "$warnString Host: $warnText"
+		}
+	    }
+	} else {
+	    lappend warnList "$warnString: no HOST value"
+	}
+
+	if {[keylget protoList FTPPORT ftpport]} {
+	    if [CHD:badTcpPort $ftpport	warnText] {
+		lappend	warnList "$warnString Port: $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no PORT value"
+	}
+
+	if {[keylget protoList FTPUSER ftpuser]} {
+	    if [lempty $ftpuser] {
+		lappend	warnList "$warnString: Login: is empty"
+	    }
+	} else {
+	    lappend warnList "$warnString: no Login: value"
+	}
+    }
+
+    # check if public/private files are readable
+    set path {}
+    foreach key {SSH_PRIVATE_KEY SSH_PUBLIC_KEY} { 
+        keylget protoList $key path
+        if {![cequal $path {}]} {
+            if { [ file pathtype $path ] == "relative" } {
+                set path $processExecDir/$path		;# raw
+            }
+
+            if {![file readable $path]} {
+                set warnText "$key value '$path' is not readable."
+                lappend warnList "$warnString: $warnText"
+            }
+        }
+    }
+    
+    # check the validity of cURL option
+    CHD:curlOptions protoList $warnString warnList
+}
+# END SFTP
+
+set _CHDcheckProtocolConfigCode(appc) {
+    append warnString "	LU6.2 APPC"
+
+    # Check boolean keys
+    set	boolKeyList { AUTOCONFIRM  AUTOCONFIRMED CONTROLMSGS DEALLOC
+		      DELAYCONNECT EBCDICTPN	 FDUX	     FLUSH
+		      LISTEN	   SECURE }
+    foreach boolKey $boolKeyList { 
+	CHD:notInList protoList	$boolKey boolList $warnString warnList
+    }
+
+    if [keylget	protoList CONNPROFILE connProfile] {
+	if [CHD:badLuItem lu6.2	profile	$connProfile warnText] {
+	    lappend warnList "$warnString Profile: $warnText"
+	}
+    } else {
+	lappend	warnList "$warnString: no CONNPROFILE value"
+    }
+
+    set	isListen 0					;# default
+    keylget protoList LISTEN isListen
+
+    if [keylget	protoList TPNNAME tpnName] {
+	# R/TPN	check depends on Call vs. Listen
+	if { $isListen } {
+	    if [CHD:badLuItem lu6.2 tpn	$tpnName warnText] {
+		lappend	warnList "$warnString TPN: $warnText"
+	    }
+	}
+    } else {
+	lappend	warnList "$warnString: no TPNNAME value"
+    }
+
+    if [keylget	protoList TPNPROFILE tpnProfile] {
+	if [info exists	tpnName] {
+	    if [string compare $tpnName	$tpnProfile] {
+		set    warnText	"TPNPROFILE '$tpnProfile' does not "
+		append warnText	"match TPNNAME '$tpnName'"
+
+		lappend	warnList "$warnString: $warnText"
+	    }
+	}
+    } else {
+	lappend	warnList "$warnString: no TPNPROFILE value"
+    }
+
+
+    if { $isListen == 0	} {
+	# If SECURE mode is selected for a CALLer, a USERID must be
+	# supplied, too
+
+	set isSecure 0					;# default
+	keylget	protoList SECURE isSecure
+
+	if { $isSecure } {
+	    if [keylget	protoList USERID userId] {
+		if [lempty $userId] {
+		    lappend warnList "$warnString: empty USERID	string"
+		}
+	    } else {
+		lappend	warnList "$warnString: no USERID value"
+	    }
+	}
+    }
+
+    # Check the	SYNCLEVEL key
+    set	syncList "none confirm"
+    CHD:notInList protoList SYNCLEVEL syncList $warnString warnList
+
+    # Check RECONNECT/REOPEN values
+    CHD:checkReconnect warnList	$warnString protoList
+}
+
+set _CHDcheckProtocolConfigCode(compass) {
+    append warnString "	Compass"
+
+    if [keylget	protoList HOST cmpsHost] {
+	if [CHD:badTcpHost $cmpsHost warnText] {
+	    lappend warnList "$warnString Host:	$warnText"
+	}
+    } else {
+	lappend	warnList "$warnString: no HOST value"
+    }
+
+    if [keylget	protoList PORT cmpsPort] {
+	if [CHD:badTcpPort $cmpsPort warnText] {
+	    lappend warnList "$warnString Port:	$warnText"
+	}
+    } else {
+	lappend	warnList "$warnString: no PORT value"
+    }
+
+    if [keylget	protoList UID cmpsUser]	{
+	if [lempty $cmpsUser] {
+	    lappend warnList "$warnString: User	name is	empty"
+	}
+    } else {
+	lappend	warnList "$warnString: no UID value"
+    }
+
+    if [keylget	protoList TRANSID cmpsTranid] {
+	if [lempty $cmpsTranid]	{
+	    lappend warnList "$warnString: Tran	ID is empty"
+	}
+    } else {
+	lappend	warnList "$warnString: no TRANSID value"
+    }
+
+    # Check must-exist keys
+    foreach key	{ PWD }	{
+	if ![keylget protoList $key {}]	{
+	    lappend warnList "$warnString: no $key value"
+	}
+    }
+
+    # Check RECONNECT/REOPEN values
+    CHD:checkReconnect warnList	$warnString protoList
+}
+
+set _CHDcheckProtocolConfigCode(decnet)	{
+    if { $isPdl	} {
+	append warnString " PDL"
+    }
+    append warnString "	DECnet"
+
+    if [keylget	protoList OBJECT decObj] {
+	if { [llength [split $decObj]] > 1 } {
+	    lappend warnList "$warnString Object: '$decObj'contains whitespace"
+	}
+    } else {
+	lappend	warnList "$warnString: no OBJECT value"
+    }
+
+    # Check RECONNECT/REOPEN values
+    CHD:checkReconnect warnList	$warnString protoList non-negative
+
+    if [keylget	protoList ISSERVER isServer] {
+	if { $isServer == 0 } {
+	    if [keylget	protoList NODE decNode]	{
+		if [CHD:badDecNode $decNode warnText] {
+		    lappend warnList "$warnString Node:	$warnText"
+		}
+	    } else {
+		lappend	warnList "$warnString: no NODE value"
+	    }
+
+	    set	pdlCheckType decnet-client
+	} else {
+	    set	pdlCheckType decnet-server
+	}
+    } else {
+	lappend	warnList "$warnString: no ISSERVER value"
+    }
+
+    if { $isPdl	== 0 } {
+	if [keylget protoList SOCKTYPE decSockType] {
+	    switch -- $decSockType {
+		message	{
+		    if [keylget	protoList MAXMSG decMaxMsg] {
+			if [CHD:notNumeric $decMaxMsg positive warnText] {
+			    lappend warnList	\
+				    "$warnString Message length: $warnText"
+			}
+		    } else {
+			lappend	warnList "$warnString: no MAXMSG value"
+		    }
+		}
+
+		stream {
+		    # Check length-encoding setup
+		    CHD:checkLenEncode warnList	$warnString protoList
+		}
+
+		default	{
+		    lappend warnList	\
+			    "$warnString: bad socket type '$decSockType'"
+		}
+	    }
+	} else {
+	    lappend warnList "$warnString: no SOCKTYPE value"
+	}
+    }
+}
+
+set _CHDcheckProtocolConfigCode(file) {
+    append warnString "	File"
+    lassign {} inFileName outFileName
+
+    global platformcap
+    if [keylget	protoList INFILE inFileName] {
+	set fileNameLen	[llength [split	$inFileName]]
+
+	if { $fileNameLen > 1 }	{
+	    lappend warnList	\
+		"$warnString: input file name contains whitespace"
+	} elseif { $fileNameLen	== 1 } {
+	    if { ([keylget platformcap DEV_NULL] != $inFileName) \
+		&& ([file pathtype $inFileName]	== "relative") } {
+		set inFileName "$processExecDir/$inFileName"
+	    }
+
+	    #don't try the readable thing on Windows_NT... it won't be
+	    #but it's not an error, either.
+	    if {([file tail $inFileName] !=	"nul:")	&& \
+		([file readable	$inFileName] ==	0 ) } {
+		lappend	warnList \
+		"$warnString: input file $inFileName is	not readable"
+	    }
+	}
+    } else {
+	lappend	warnList "$warnString: no INFILE value"
+	set inFileName {}
+    }
+
+    if [keylget	protoList INFORMAT inFormat] {
+	if { [lsearch -exact { len10 nl	eof} $inFormat] < 0 } {
+	    lappend warnList "$warnString: bad input format '$inFormat'"
+	}
+    } else {
+	lappend	warnList "$warnString: no INFORMAT value"
+    }
+
+    if [keylget	protoList INDELAY inDelay] {
+	if { [llength $inFileName]
+	  && [CHD:notNumeric $inDelay pure warnText] } {
+	    lappend warnList "$warnString input	delay: $warnText"
+	}
+    } else {
+	lappend	warnList "$warnString: no INDELAY value"
+    }
+
+    if [keylget	protoList OUTFILE outFileName] {
+	if { [llength [split $outFileName]] > 1	} {
+	    lappend warnList "$warnString: output file name contains whitespace"
+	}
+    } else {
+	lappend	warnList "$warnString: no OUTFILE value"
+    }
+
+    if [keylget	protoList OUTFORMAT outFormat] {
+	if { [lsearch -exact { len10 nl	eof} $outFormat] <	0 } {
+	    lappend warnList "$warnString: bad output format '$outFormat'"
+	}
+    } else {
+	lappend	warnList "$warnString: no OUTFORMAT value"
+    }
+
+    CHD:notInList protoList OUTAPPEND boolList $warnString warnList
+
+    if { [lempty "$inFileName $outFileName"] } {
+	lappend	warnList "$warnString: no file names specified"
+    }
+}
+
+set _CHDcheckProtocolConfigCode(link) {
+    if [cequal $typeValue link]	{
+	append warnString " Link"
+    } else {
+	append warnString " Prosper"
+    }
+
+    # LINE must	be present and identify	a character-special file in /dev/
+    if [keylget	protoList LINE linkLine] {
+	if [lempty $linkLine] {
+	    set	warnText  "$warnString:	no Line	value specified"
+	} else {
+	    if [CHD:badDevice $linkLine	warnText] {
+		lappend	warnList "$warnString Line: $warnText"
+	    }
+	}
+    } else {
+	lappend	warnList "$warnString: no LINE value"
+    }
+
+    # BAUD value must be present and valid
+    set	baudList { 300 1200 2400 4800 9600 19200 38400 }
+    CHD:notInList protoList BAUD baudList $warnString warnList
+
+    # BITS value must be present and valid
+    set	bitsList { 7 8 }
+    CHD:notInList protoList BITS bitsList $warnString warnList
+
+    # PARITY value must	be present and valid
+    set	parityList { even none odd }
+    CHD:notInList protoList PARITY parityList $warnString warnList
+
+    # STOP value must be present and valid
+    set	stopList { 1 2 }
+    CHD:notInList protoList STOP stopList $warnString warnList
+
+    set	numEntryList {
+	{ MAXHTSZ		{host message size}	}
+	{ MAXNAKS		{NAK count}		}
+	{ MAXVBSZ		{terminal message size}	}
+	{ NAKWAIT		{NAK wait}		}
+	{ NLINES		{line count}		}
+    }
+
+    if [cequal $typeValue prosper] {
+	lappend	numEntryList { ENQWAIT {ENQ wait} }
+    }
+
+    foreach numEntry $numEntryList {
+	lassign	$numEntry key label
+
+	if [keylget protoList $key value] {
+	    if [CHD:notNumeric $value positive warnText] {
+		lappend	warnList "$warnString $label: $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no $key value"
+	}
+    }
+
+    # Exactly one audit	file value
+    if [keylget	protoList AUDITFILE linkAudit] {
+	if { [llength [split $linkAudit]] != 1 } {
+	    set	   warnText "Audit filename '$linkAudit' "
+	    append warnText "contains whitespace"
+
+	    lappend warnList "$warnString: $warnText"
+	}
+    } else {
+	lappend	warnList "$warnString: no AUDITFILE value"
+    }
+}
+
+set _CHDcheckProtocolConfigCode(lu2) {
+    # 'full duplex' LU2	verifies just like LU3
+    eval $_CHDcheckProtocolConfigCode(lu3)
+}
+
+set _CHDcheckProtocolConfigCode(lu2screen) {
+    # login/screen/HCONN LU2 verification
+
+    append warnString "	LU2 Screen"
+
+    if [keylget	protoList SESSION lu2Session] {
+	if ![regexp -nocase {[a-z]} $lu2Session] {
+	    lappend warnList "$warnString Session: '$lu2Session' must be a..z"
+	}
+    } else {
+	lappend	warnList "$warnString: no SESSION value"
+    }
+
+    # Check positive-numeric keys
+    foreach key	{ TIMEOUT NROWS	NCOLS }	{
+	if [keylget protoList $key val]	{
+	    if [CHD:notNumeric $val positive warnText] {
+		lappend	warnList "$warnString: $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no $key value"
+	}
+    }
+
+    # Check must-exist keys
+    foreach key	{ UID PWD FORMAT } {
+	if ![keylget protoList $key {}]	{
+	    lappend warnList "$warnString: no $key value"
+	}
+    }
+
+    # Check RECONNECT/REOPEN values
+    CHD:checkReconnect warnList	$warnString protoList
+}
+
+set _CHDcheckProtocolConfigCode(lu3) {
+    # LU2/LU3 config
+
+    append warnString "	[string	toupper	$typeValue]"
+
+    if [keylget	protoList CONNPROFILE lu3Profile] {
+	if [CHD:badLuItem $typeValue profile $lu3Profile warnText] {
+	    lappend warnList "$warnString Profile: $warnText"
+	}
+    } else {
+	lappend	warnList "$warnString: no CONNPROFILE value"
+    }
+
+    # Check RECONNECT/REOPEN values
+    CHD:checkReconnect warnList	$warnString protoList
+}
+
+set _CHDcheckProtocolConfigCode(numfile) {
+    append warnString "	Numfile"
+
+    if [keylget	protoList IBDIR	ibDir] {
+	set ibDirLen [llength [split $ibDir]]
+	if { $ibDirLen > 0 } {
+	    if { $ibDirLen == 1	} {
+		if { [file pathtype $ibDir] == "relative" } {
+		    set	ibDir "$processExecDir/$ibDir"
+		}
+
+		if {   [file isdirectory $ibDir] == 0
+		    || [file readable	 $ibDir] == 0
+		    || [file writable	 $ibDir] == 0 }	{
+		    set	   warnText "IB	directory '$ibDir' is not a "
+		    append warnText "readable, writable	directory"
+
+		    lappend warnList "$warnString: $warnText"
+		}
+	    } else {
+		set warnText "specify at most 1	IB directory name"
+
+		lappend	warnList "$warnString: $warnText"
+	    }
+
+	    if [keylget	protoList IBFREQ ibFreq] {
+		if [CHD:notNumeric $ibFreq positive warnText] {
+		    lappend warnList "$warnString: $warnText"
+		}
+	    } else {
+		lappend	warnList "$warnString: no IBFREQ value"
+	    }
+
+	    if [keylget	protoList IBSENDMAX ibSendMax] {
+		if [CHD:notNumeric $ibSendMax pure warnText] {
+		    lappend warnList "$warnString: $warnText"
+		}
+	    } else {
+		lappend	warnList "$warnString: no IBSENDMAX value"
+	    }
+
+	    if [keylget	protoList IBSENDMIN ibSendMin] {
+		if [CHD:notNumeric $ibSendMin pure warnText] {
+		    lappend warnList "$warnString: $warnText"
+		}
+	    } else {
+		lappend	warnList "$warnString: no IBSENDMIN value"
+	    }
+
+	    catch {
+		if { $ibSendMax	< $ibSendMin } {
+		    set	warnText "IB max value must exceed IB min"
+		    lappend warnList "$warnString: $warnText"
+		}
+	    }
+
+	    if [keylget	protoList IBSENDPERCENT	ibSendPercent] {
+		if [CHD:notNumeric $ibSendPercent positive warnText] {
+		    lappend warnList "$warnString: $warnText"
+		} elseif { $ibSendPercent > 100	} {
+		    set	warnText "IB %age cannot exceed	100"
+		    lappend warnList "$warnString: $warnText"
+		}
+	    } else {
+		lappend	warnList "$warnString: no IBSENDPERCENT	value"
+	    }
+
+	    set	styleList " nlsep single "
+	    CHD:notInList protoList IBSTYLE styleList $warnString warnList
+	}
+    } else {
+	set ibDir {}
+	lappend	warnList "$warnString: no IBDIR	value"
+    }
+
+    if [keylget	protoList OBMASK obMask] {
+	set obMaskLen [llength [split $obMask]]
+	if { $obMaskLen	> 0 } {
+	    if { [llength [split $obMask]] > 1 } {
+		set warnText "OB mask '$obMask'	contains whitespace"
+		lappend	warnList "$warnString: $warnText"
+	    }
+
+	    if { $obMaskLen == 1 } {
+		if [string match *%* $obMask] {
+		    if [string match *%*%* $obMask] {
+			set warnText "at most one '%' may appear in an OB mask"
+			lappend	warnList "$warnString: $warnText"
+		    } else {
+			if ![regexp {%[0-9]*d} $obMask match] {
+			    set	   warnText "OB	mask '$obMask' does not	"
+			    append warnText "contain a %d string"
+
+			    lappend warnList "$warnString: $warnText"
+			}
+
+			if [keylget protoList OBCOUNTERNAME obCounter] {
+			    if { [llength [split $obCounter]] != 1 } {
+				set    warnText	"OB counter '$obCounter' "
+				append warnText	"contains whitespace"
+
+				lappend	warnList "$warnString: $warnText"
+			    }
+			} else {
+			    lappend warnList	\
+				    "$warnString: no OBCOUNTERNAME value"
+			}
+		    }
+		} else {
+		    set	   warnText "OB	mask '$obMask' does not	"
+		    append warnText "contain a %d string"
+
+		    lappend warnList "$warnString: $warnText"
+		}
+
+		if [keylget protoList OBDIR obDir] {
+		    if { [llength [split $obDir]] > 1 }	{
+			set warnText "OB directory '$obDir' contains whitespace"
+			lappend	warnList "$warnString: $warnText"
+		    } else {
+			if {[file pathtype $obDir] == "relative"} {
+			    set	obDir "$processExecDir/$obDir"
+			}
+
+			if {   [file isdirectory $obDir] == 0
+			    || [file readable	 $obDir] == 0
+			    || [file writable	 $obDir] == 0 }	{
+			    set	   warnText "OB	directory '$obDir' is not a "
+			    append warnText "readable, writable	directory"
+
+			    lappend warnList "$warnString: $warnText"
+			}
+		    }
+		} else {
+		    lappend warnList "$warnString: no OBDIR value"
+		}
+	    } else {
+		lappend	warnList	\
+			"$warnString: OB mask '$obMask'	contains whitespace"
+	    }
+
+	    if [keylget	protoList OBSTYLE obStyle] {
+		switch -- $obStyle {
+		    ftp	{
+			if [keylget protoList OBRMTHOSTNAME rmtHostName] {
+			    if [CHD:badTcpHost $rmtHostName warnText] {
+				set warnLabel "OB FTP dest host"
+				lappend	warnList	\
+				    "$warnString $warnLabel: $warnText"
+			    }
+			} else {
+			    lappend warnList	\
+				    "$warnString: no OBRMTHOSTNAME value"
+			}
+
+			if [keylget protoList OBRMTDIR rmtDir] {
+			    if { [llength [split $rmtDir]] != 1	} {
+				set    warnText	"OB FTP	dest directory "
+				append warnText	"'$rmtDir' is not a "
+				append warnText	"single	value"
+
+				lappend	warnList "$warnString: $warnText"
+			    }
+			} else {
+			    lappend warnList "$warnString: no OBRMTDIR value"
+			}
+		    }
+
+		    local {
+			;# no further checks
+		    }
+
+		    default {
+			set warnText "bad OB style '$obStyle'"
+			lappend	warnList "$warnString: $warnText"
+		    }
+		}
+	    } else {
+		lappend	warnList "$warnString: no OBSTYLE value"
+	    }
+	}
+    } else {
+	set obMask {}
+	lappend	warnList "$warnString: no OBMASK value"
+    }
+
+    if [lempty "$ibDir $obMask"] {
+	lappend	warnList	\
+		"$warnString: neither IB directory nor OB mask supplied"
+    }
+}
+
+set _CHDcheckProtocolConfigCode(pdl-async) {
+    append warnString "	PDL Async"
+
+    # BAUD value must be present and valid
+    set	baudList { 100 300 600 1200 2400 4800 9600 19200 38400 }
+    CHD:notInList protoList BAUD baudList $warnString warnList
+
+    # BITS value must be present and valid
+    set	bitsList { 5 6 7 8 }
+    CHD:notInList protoList BITS bitsList $warnString warnList
+
+    # ERRFILE must be present; at most one value
+    if [keylget	protoList ERRFILE pdlaErrfile] {
+	if { [llength [split $pdlaErrfile]] > 1	} {
+	    lappend warnList "$warnString: specify at most 1 error file"
+	}
+    } else {
+	lappend	warnList "$warnString: no ERRFILE value"
+    }
+
+    # LINE must	be present and identify	a character-special file
+    # in /dev
+    if [keylget	protoList LINE pdlaLine] {
+	if [lempty $pdlaLine] {
+	    lappend warnList "$warnString: no Line value specified"
+	} else {
+	    if [CHD:badDevice $pdlaLine	warnText] {
+		lappend	warnList "$warnString Line: $warnText"
+	    }
+	}
+    } else {
+	lappend	warnList "$warnString: no LINE value"
+    }
+
+    # PARITY must be present and valid
+    set	parityList { even mark none odd	space }
+    CHD:notInList protoList PARITY parityList $warnString warnList
+
+    # Check RECONNECT/REOPEN values
+    CHD:checkReconnect warnList	$warnString protoList
+
+    # REQ_CD must be present and valid
+    CHD:notInList protoList REQ_CD boolList $warnString	warnList
+
+    # USE_RTS must be present and valid
+    CHD:notInList protoList USE_RTS boolList $warnString warnList
+
+    # USE_XON must be present and valid
+    CHD:notInList protoList USE_XON boolList $warnString warnList
+
+    # Set up for PDL type check, below.
+    set	pdlCheckType async
+}
+
+set _CHDcheckProtocolConfigCode(pdl-decnet)	\
+   $_CHDcheckProtocolConfigCode(decnet)
+
+set _CHDcheckProtocolConfigCode(pdl-tcpip) {
+    if { $isPdl	} {
+	append warnString " PDL"
+    }
+    append warnString "	TCP/IP"
+
+    if [keylget	protoList PORT tcpPort]	{
+	if [CHD:badTcpPort $tcpPort warnText] {
+	    lappend warnList "$warnString Port:	$warnText"
+	}
+    } else {
+	lappend	warnList "$warnString: no PORT value"
+    }
+
+    # Check RECONNECT/REOPEN values
+    CHD:checkReconnect warnList	$warnString protoList non-negative
+
+    set dual 0
+    keylget protoList IPV4_V6_DUAL dual
+    set localIP ""
+    keylget protoList LOCAL_IP localIP
+    if [CHD:checkTcpHostIPv6 $localIP $dual warnText] { # is an IPv6 address
+	if {$warnText != ""} {
+	    lappend warnList "$warnString Host Name or IP Address: $warnText"
+	}
+    }
+
+    if [keylget	protoList ISSERVER isServer] {
+	if { $isServer == 0 } {
+	    if [keylget	protoList HOST tcpHost]	{
+		if [CHD:checkTcpHostIPv6 $tcpHost $dual warnText] { # is an IPv6 address
+		    if {$warnText != ""} {
+			lappend warnList "$warnString Host: $warnText"
+		    }
+		} else {
+		    if [CHD:badTcpHost $tcpHost warnText] {
+			lappend warnList "$warnString Host: $warnText"
+		    }
+		}
+	    } else {
+		lappend	warnList "$warnString: no HOST value"
+	    }
+	    set	pdlCheckType tcp-client
+
+            CHD:checkDelayedConnection warnList	$warnString protoList
+
+	} else {
+	    set	pdlCheckType tcp-server
+	}
+    } else {
+	lappend	warnList "$warnString: no ISSERVER value"
+    }
+
+    if { ! $isPdl } {
+	# Check	length-encoding	setup
+	CHD:checkLenEncode warnList $warnString	protoList
+
+	# PR-2857
+	# Check	boolean	keys
+	set boolKeyList	{ CLOSE	CONTROLMSGS WRITEZERO }
+	foreach	boolKey	$boolKeyList { 
+	    CHD:notInList protoList $boolKey boolList $warnString warnList
+	}
+    }
+
+
+    # AR6612, MODE check
+    set	modeList { {} ClientAnon ClientAuth Client ServerAnon ServerAuth Server}
+    if {[keylget protoList IS_SSL isSSL]} {
+        if { ![lempty $isSSL] } {
+            if {$isSSL} {
+                CHD:notInList protoList MODE modeList $warnString warnList
+            }
+        }
+    }
+}
+
+set _CHDcheckProtocolConfigCode(ppcf) {
+    append warnString "	LU6.2 PPCF"
+
+    # Check boolean keys
+    set	boolKeyList { DELAYCONNECT EBCDICTPN USEALERTS }
+    foreach boolKey $boolKeyList { 
+	CHD:notInList protoList	$boolKey boolList $warnString warnList
+    }
+
+    if [keylget	protoList CONNPROFILE ppcfConnProfile] {
+	if [CHD:badLuItem lu6.2	profile	$ppcfConnProfile warnText] {
+	    lappend warnList "$warnString Profile: $warnText"
+	}
+    } else {
+	lappend	warnList "$warnString: no CONNPROFILE value"
+    }
+
+    if [keylget	protoList RTPNNAME ppcfRtpn] {
+	if [CHD:badLuItem lu6.2	rtpn $ppcfRtpn warnText] {
+	    lappend warnList "$warnString RTPN:	$warnText"
+	}
+    } else {
+	lappend	warnList "$warnString: no RTPNNAME value"
+    }
+
+    if [keylget	protoList FRDLEN ppcfFrdLen] {
+	if [CHD:notNumeric $ppcfFrdLen positive	warnText] {
+	    lappend warnList "$warnString: FRD length must be positive"
+	} else {
+	    if { $ppcfFrdLen < 8 } {
+		lappend	warnList "$warnString: FRD length must >= 8"
+	    }
+	}
+    } else {
+	lappend	warnList "$warnString: no FRDLEN value"
+    }
+
+    CHD:checkKeyLen protoList PRODID "Product ID" 1  4 $warnString warnList
+    CHD:checkKeyLen protoList USERID "Userid"	  1  8 $warnString warnList
+    CHD:checkKeyLen protoList PASSWD "Password"	  1 10 $warnString warnList
+
+    set	ppcfUseAlerts 0
+    if { [keylget protoList USEALERTS ppcfUseAlerts] &&	$ppcfUseAlerts } {
+	if [keylget protoList TPNNAME ppcfTpn] {
+	    if [CHD:badLuItem lu6.2 tpn	$ppcfTpn warnText] {
+		lappend	warnList "$warnString TPN: $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no TPNNAME value"
+	    set	ppcfTpn	{}
+	}
+	if [keylget protoList TPNPROFILE ppcfTpnProfile] {
+	    if [string compare $ppcfTpn	$ppcfTpnProfile] {
+		set    warnText	"TPNPROFILE '$ppcfTpnProfile' does not "
+		append warnText	"match TPNNAME '$ppcfTpn'"
+
+		lappend	warnList "$warnString: $warnText"
+	    }
+	} else {
+	    lappend warnList "$warnString: no TPNPROFILE value"
+	}
+    }
+
+    # Check RECONNECT/REOPEN values
+    CHD:checkReconnect warnList	$warnString protoList
+}
+
+set _CHDcheckProtocolConfigCode(prosper) $_CHDcheckProtocolConfigCode(link)
+
+set _CHDcheckProtocolConfigCode(tcpip) $_CHDcheckProtocolConfigCode(pdl-tcpip)
+
+#####################################################################
+# Name:		CHD:curlOption
+# Purpose:	fetch a	key and	check the value's length
+# Args:		warnListVar	= warning list variable
+#		symName		= thread symbolic name
+#		tableName	= table name
+# Returns:	
+# Notes:	
+#
+
+proc CHD:curlOptions { protoListVar warnString warnListVar } {
+    upvar			\
+	$warnListVar warnList \
+	$protoListVar protoList
+
+    # Define curl option from curl/curl.h automatically, begin.
+    set curlOptList {
+        { CURLOPT_FILE    10001 }
+        { CURLOPT_URL    10002 }
+        { CURLOPT_PORT    3 }
+        { CURLOPT_PROXY    10004 }
+        { CURLOPT_USERPWD    10005 }
+        { CURLOPT_PROXYUSERPWD    10006 }
+        { CURLOPT_RANGE    10007 }
+        { CURLOPT_INFILE    10009 }
+        { CURLOPT_ERRORBUFFER    10010 }
+        { CURLOPT_WRITEFUNCTION    20011 }
+        { CURLOPT_READFUNCTION    20012 }
+        { CURLOPT_TIMEOUT    13 }
+        { CURLOPT_INFILESIZE    14 }
+        { CURLOPT_POSTFIELDS    10015 }
+        { CURLOPT_REFERER    10016 }
+        { CURLOPT_FTPPORT    10017 }
+        { CURLOPT_USERAGENT    10018 }
+        { CURLOPT_LOW_SPEED_LIMIT    19 }
+        { CURLOPT_LOW_SPEED_TIME    20 }
+        { CURLOPT_RESUME_FROM    21 }
+        { CURLOPT_COOKIE    10022 }
+        { CURLOPT_HTTPHEADER    10023 }
+        { CURLOPT_HTTPPOST    10024 }
+        { CURLOPT_SSLCERT    10025 }
+        { CURLOPT_KEYPASSWD    10026 }
+        { CURLOPT_CRLF    27 }
+        { CURLOPT_QUOTE    10028 }
+        { CURLOPT_WRITEHEADER    10029 }
+        { CURLOPT_COOKIEFILE    10031 }
+        { CURLOPT_SSLVERSION    32 }
+        { CURLOPT_TIMECONDITION    33 }
+        { CURLOPT_TIMEVALUE    34 }
+        { CURLOPT_CUSTOMREQUEST    10036 }
+        { CURLOPT_STDERR    10037 }
+        { CURLOPT_POSTQUOTE    10039 }
+        { CURLOPT_WRITEINFO    10040 }
+        { CURLOPT_VERBOSE    41 }
+        { CURLOPT_HEADER    42 }
+        { CURLOPT_NOPROGRESS    43 }
+        { CURLOPT_NOBODY    44 }
+        { CURLOPT_FAILONERROR    45 }
+        { CURLOPT_UPLOAD    46 }
+        { CURLOPT_POST    47 }
+        { CURLOPT_DIRLISTONLY    48 }
+        { CURLOPT_APPEND    50 }
+        { CURLOPT_NETRC    51 }
+        { CURLOPT_FOLLOWLOCATION    52 }
+        { CURLOPT_TRANSFERTEXT    53 }
+        { CURLOPT_PUT    54 }
+        { CURLOPT_PROGRESSFUNCTION    20056 }
+        { CURLOPT_PROGRESSDATA    10057 }
+        { CURLOPT_AUTOREFERER    58 }
+        { CURLOPT_PROXYPORT    59 }
+        { CURLOPT_POSTFIELDSIZE    60 }
+        { CURLOPT_HTTPPROXYTUNNEL    61 }
+        { CURLOPT_INTERFACE    10062 }
+        { CURLOPT_KRBLEVEL    10063 }
+        { CURLOPT_SSL_VERIFYPEER    64 }
+        { CURLOPT_CAINFO    10065 }
+        { CURLOPT_MAXREDIRS    68 }
+        { CURLOPT_FILETIME    69 }
+        { CURLOPT_TELNETOPTIONS    10070 }
+        { CURLOPT_MAXCONNECTS    71 }
+        { CURLOPT_CLOSEPOLICY    72 }
+        { CURLOPT_FRESH_CONNECT    74 }
+        { CURLOPT_FORBID_REUSE    75 }
+        { CURLOPT_RANDOM_FILE    10076 }
+        { CURLOPT_EGDSOCKET    10077 }
+        { CURLOPT_CONNECTTIMEOUT    78 }
+        { CURLOPT_HEADERFUNCTION    20079 }
+        { CURLOPT_HTTPGET    80 }
+        { CURLOPT_SSL_VERIFYHOST    81 }
+        { CURLOPT_COOKIEJAR    10082 }
+        { CURLOPT_SSL_CIPHER_LIST    10083 }
+        { CURLOPT_HTTP_VERSION    84 }
+        { CURLOPT_FTP_USE_EPSV    85 }
+        { CURLOPT_SSLCERTTYPE    10086 }
+        { CURLOPT_SSLKEY    10087 }
+        { CURLOPT_SSLKEYTYPE    10088 }
+        { CURLOPT_SSLENGINE    10089 }
+        { CURLOPT_SSLENGINE_DEFAULT    90 }
+        { CURLOPT_DNS_USE_GLOBAL_CACHE    91 }
+        { CURLOPT_DNS_CACHE_TIMEOUT    92 }
+        { CURLOPT_PREQUOTE    10093 }
+        { CURLOPT_DEBUGFUNCTION    20094 }
+        { CURLOPT_DEBUGDATA    10095 }
+        { CURLOPT_COOKIESESSION    96 }
+        { CURLOPT_CAPATH    10097 }
+        { CURLOPT_BUFFERSIZE    98 }
+        { CURLOPT_NOSIGNAL    99 }
+        { CURLOPT_SHARE    10100 }
+        { CURLOPT_PROXYTYPE    101 }
+        { CURLOPT_ACCEPT_ENCODING    10102 }
+        { CURLOPT_PRIVATE    10103 }
+        { CURLOPT_HTTP200ALIASES    10104 }
+        { CURLOPT_UNRESTRICTED_AUTH    105 }
+        { CURLOPT_FTP_USE_EPRT    106 }
+        { CURLOPT_HTTPAUTH    107 }
+        { CURLOPT_SSL_CTX_FUNCTION    20108 }
+        { CURLOPT_SSL_CTX_DATA    10109 }
+        { CURLOPT_FTP_CREATE_MISSING_DIRS    110 }
+        { CURLOPT_PROXYAUTH    111 }
+        { CURLOPT_FTP_RESPONSE_TIMEOUT    112 }
+        { CURLOPT_IPRESOLVE    113 }
+        { CURLOPT_MAXFILESIZE    114 }
+        { CURLOPT_INFILESIZE_LARGE    30115 }
+        { CURLOPT_RESUME_FROM_LARGE    30116 }
+        { CURLOPT_MAXFILESIZE_LARGE    30117 }
+        { CURLOPT_NETRC_FILE    10118 }
+        { CURLOPT_USE_SSL    119 }
+        { CURLOPT_POSTFIELDSIZE_LARGE    30120 }
+        { CURLOPT_TCP_NODELAY    121 }
+        { CURLOPT_FTPSSLAUTH    129 }
+        { CURLOPT_IOCTLFUNCTION    20130 }
+        { CURLOPT_IOCTLDATA    10131 }
+        { CURLOPT_FTP_ACCOUNT    10134 }
+        { CURLOPT_COOKIELIST    10135 }
+        { CURLOPT_IGNORE_CONTENT_LENGTH    136 }
+        { CURLOPT_FTP_SKIP_PASV_IP    137 }
+        { CURLOPT_FTP_FILEMETHOD    138 }
+        { CURLOPT_LOCALPORT    139 }
+        { CURLOPT_LOCALPORTRANGE    140 }
+        { CURLOPT_CONNECT_ONLY    141 }
+        { CURLOPT_CONV_FROM_NETWORK_FUNCTION    20142 }
+        { CURLOPT_CONV_TO_NETWORK_FUNCTION    20143 }
+        { CURLOPT_CONV_FROM_UTF8_FUNCTION    20144 }
+        { CURLOPT_MAX_SEND_SPEED_LARGE    30145 }
+        { CURLOPT_MAX_RECV_SPEED_LARGE    30146 }
+        { CURLOPT_FTP_ALTERNATIVE_TO_USER    10147 }
+        { CURLOPT_SOCKOPTFUNCTION    20148 }
+        { CURLOPT_SOCKOPTDATA    10149 }
+        { CURLOPT_SSL_SESSIONID_CACHE    150 }
+        { CURLOPT_SSH_AUTH_TYPES    151 }
+        { CURLOPT_SSH_PUBLIC_KEYFILE    10152 }
+        { CURLOPT_SSH_PRIVATE_KEYFILE    10153 }
+        { CURLOPT_FTP_SSL_CCC    154 }
+        { CURLOPT_TIMEOUT_MS    155 }
+        { CURLOPT_CONNECTTIMEOUT_MS    156 }
+        { CURLOPT_HTTP_TRANSFER_DECODING    157 }
+        { CURLOPT_HTTP_CONTENT_DECODING    158 }
+        { CURLOPT_NEW_FILE_PERMS    159 }
+        { CURLOPT_NEW_DIRECTORY_PERMS    160 }
+        { CURLOPT_POSTREDIR    161 }
+        { CURLOPT_SSH_HOST_PUBLIC_KEY_MD5    10162 }
+        { CURLOPT_OPENSOCKETFUNCTION    20163 }
+        { CURLOPT_OPENSOCKETDATA    10164 }
+        { CURLOPT_COPYPOSTFIELDS    10165 }
+        { CURLOPT_PROXY_TRANSFER_MODE    166 }
+        { CURLOPT_SEEKFUNCTION    20167 }
+        { CURLOPT_SEEKDATA    10168 }
+        { CURLOPT_CRLFILE    10169 }
+        { CURLOPT_ISSUERCERT    10170 }
+        { CURLOPT_ADDRESS_SCOPE    171 }
+        { CURLOPT_CERTINFO    172 }
+        { CURLOPT_USERNAME    10173 }
+        { CURLOPT_PASSWORD    10174 }
+        { CURLOPT_PROXYUSERNAME    10175 }
+        { CURLOPT_PROXYPASSWORD    10176 }
+        { CURLOPT_NOPROXY    10177 }
+        { CURLOPT_TFTP_BLKSIZE    178 }
+        { CURLOPT_SOCKS5_GSSAPI_SERVICE    10179 }
+        { CURLOPT_SOCKS5_GSSAPI_NEC    180 }
+        { CURLOPT_PROTOCOLS    181 }
+        { CURLOPT_REDIR_PROTOCOLS    182 }
+        { CURLOPT_SSH_KNOWNHOSTS    10183 }
+        { CURLOPT_SSH_KEYFUNCTION    20184 }
+        { CURLOPT_SSH_KEYDATA    10185 }
+        { CURLOPT_MAIL_FROM    10186 }
+        { CURLOPT_MAIL_RCPT    10187 }
+        { CURLOPT_FTP_USE_PRET    188 }
+        { CURLOPT_RTSP_REQUEST    189 }
+        { CURLOPT_RTSP_SESSION_ID    10190 }
+        { CURLOPT_RTSP_STREAM_URI    10191 }
+        { CURLOPT_RTSP_TRANSPORT    10192 }
+        { CURLOPT_RTSP_CLIENT_CSEQ    193 }
+        { CURLOPT_RTSP_SERVER_CSEQ    194 }
+        { CURLOPT_INTERLEAVEDATA    10195 }
+        { CURLOPT_INTERLEAVEFUNCTION    20196 }
+        { CURLOPT_WILDCARDMATCH    197 }
+        { CURLOPT_CHUNK_BGN_FUNCTION    20198 }
+        { CURLOPT_CHUNK_END_FUNCTION    20199 }
+        { CURLOPT_FNMATCH_FUNCTION    20200 }
+        { CURLOPT_CHUNK_DATA    10201 }
+        { CURLOPT_FNMATCH_DATA    10202 }
+        { CURLOPT_RESOLVE    10203 }
+        { CURLOPT_TLSAUTH_USERNAME    10204 }
+        { CURLOPT_TLSAUTH_PASSWORD    10205 }
+        { CURLOPT_TLSAUTH_TYPE    10206 }
+        { CURLOPT_TRANSFER_ENCODING    207 }
+        { CURLOPT_CLOSESOCKETFUNCTION    20208 }
+        { CURLOPT_CLOSESOCKETDATA    10209 }
+        { CURLOPT_GSSAPI_DELEGATION    210 }
+        { CURLOPT_DNS_SERVERS    10211 }
+        { CURLOPT_ACCEPTTIMEOUT_MS    212 }
+        { CURLOPT_TCP_KEEPALIVE    213 }
+        { CURLOPT_TCP_KEEPIDLE    214 }
+        { CURLOPT_TCP_KEEPINTVL    215 }
+        { CURLOPT_SSL_OPTIONS    216 }
+        { CURLOPT_MAIL_AUTH    10217 }
+        { CURLOPT_SASL_IR    218 }
+        { CURLOPT_XFERINFOFUNCTION    20219 }
+        { CURLOPT_XOAUTH2_BEARER    10220 }
+        { CURLOPT_DNS_INTERFACE    10221 }
+        { CURLOPT_DNS_LOCAL_IP4    10222 }
+        { CURLOPT_DNS_LOCAL_IP6    10223 }
+        { CURLOPT_LOGIN_OPTIONS    10224 }
+        { CURLOPT_SSL_ENABLE_NPN    225 }
+        { CURLOPT_SSL_ENABLE_ALPN    226 }
+        { CURLOPT_EXPECT_100_TIMEOUT_MS    227 }
+        { CURLOPT_PROXYHEADER    10228 }
+        { CURLOPT_HEADEROPT    229 }
+    }
+    # Define curl option automatically, end. 
+    
+    # Define supported curl options in cloverleaf
+    set curlOptSupport {
+        { CURLOPT_PORT    3 }
+        { CURLOPT_TIMEOUT    13 }
+        { CURLOPT_LOW_SPEED_LIMIT    19 }
+        { CURLOPT_LOW_SPEED_TIME    20 }
+        { CURLOPT_CRLF    27 }
+        { CURLOPT_SSLVERSION    32 }
+        { CURLOPT_VERBOSE    41 } 
+        { CURLOPT_HEADER    42 }
+        { CURLOPT_FAILONERROR    45 }
+        { CURLOPT_DIRLISTONLY    48 }
+        { CURLOPT_APPEND    50 }
+        { CURLOPT_NETRC    51 }
+        { CURLOPT_TRANSFERTEXT    53 }
+        { CURLOPT_AUTOREFERER    58 }
+        { CURLOPT_PROXYPORT    59 }
+        { CURLOPT_SSL_VERIFYPEER    64 }
+        { CURLOPT_MAXREDIRS    68 }
+        { CURLOPT_FILETIME    69 }
+        { CURLOPT_FRESH_CONNECT    74 }
+        { CURLOPT_FORBID_REUSE    75 }
+        { CURLOPT_CONNECTTIMEOUT    78 }
+        { CURLOPT_SSL_VERIFYHOST    81 }
+        { CURLOPT_HTTP_VERSION    84 }
+        { CURLOPT_FTP_USE_EPSV    85 }
+        { CURLOPT_SSLENGINE_DEFAULT    90 }
+        { CURLOPT_DNS_CACHE_TIMEOUT    92 }
+        { CURLOPT_PROXYTYPE    101 }
+        { CURLOPT_FTP_USE_EPRT    106 }
+        { CURLOPT_HTTPAUTH    107 }
+        { CURLOPT_FTP_CREATE_MISSING_DIRS    110 }
+        { CURLOPT_FTP_RESPONSE_TIMEOUT    112 }
+        { CURLOPT_MAXFILESIZE    114 }
+        { CURLOPT_TCP_NODELAY    121 }
+        { CURLOPT_IGNORE_CONTENT_LENGTH    136 }
+        { CURLOPT_FTP_SKIP_PASV_IP    137 }
+        { CURLOPT_FTP_FILEMETHOD    138 }
+        { CURLOPT_LOCALPORT    139 }
+        { CURLOPT_LOCALPORTRANGE    140 }
+        { CURLOPT_TIMEOUT_MS    155 }
+        { CURLOPT_CONNECTTIMEOUT_MS    156 }
+        { CURLOPT_HTTP_TRANSFER_DECODING    157 }
+        { CURLOPT_HTTP_CONTENT_DECODING    158 }
+        { CURLOPT_NEW_FILE_PERMS    159 }
+        { CURLOPT_NEW_DIRECTORY_PERMS    160 }
+        { CURLOPT_PROXY_TRANSFER_MODE    166 }
+        { CURLOPT_CERTINFO    172 }
+        { CURLOPT_URL    10002 }
+        { CURLOPT_PROXY    10004 }
+        { CURLOPT_USERPWD    10005 }
+        { CURLOPT_PROXYUSERPWD    10006 }
+        { CURLOPT_REFERER    10016 }
+        { CURLOPT_FTPPORT    10017 }
+        { CURLOPT_USERAGENT    10018 }
+        { CURLOPT_COOKIE    10022 }
+        { CURLOPT_KEYPASSWD    10026 }
+        { CURLOPT_COOKIEFILE    10031 }
+        { CURLOPT_CUSTOMREQUEST    10036 }
+        { CURLOPT_INTERFACE    10062 }
+        { CURLOPT_CAINFO    10065 }
+        { CURLOPT_SSLCERTTYPE    10086 }
+        { CURLOPT_SSLKEY    10087 }
+        { CURLOPT_SSLKEYTYPE    10088 }
+        { CURLOPT_SSLENGINE    10089 }
+        { CURLOPT_CAPATH    10097 }
+        { CURLOPT_NETRC_FILE    10118 }
+        { CURLOPT_FTP_ACCOUNT    10134 }
+        { CURLOPT_SSH_PUBLIC_KEYFILE    10152 }
+        { CURLOPT_SSH_PRIVATE_KEYFILE    10153 }
+        { CURLOPT_CRLFILE    10169 }
+        { CURLOPT_ISSUERCERT    10170 }
+        { CURLOPT_USERNAME    10173 }
+        { CURLOPT_PASSWORD    10174 }
+        { CURLOPT_PROXYUSERNAME    10175 }
+        { CURLOPT_PROXYPASSWORD    10176 }
+        { CURLOPT_MAXFILESIZE_LARGE    30117 }
+        { CURLOPT_MAX_SEND_SPEED_LARGE    30145 }
+        { CURLOPT_MAX_RECV_SPEED_LARGE    30146 }
+        { CURLOPT_NOPROXY    10177 }
+        { CURLOPT_PROTOCOLS    181 }
+        { CURLOPT_REDIR_PROTOCOLS    182 }
+        { CURLOPT_SSH_KNOWNHOSTS    10183 }
+        { CURLOPT_FTP_USE_PRET    188 }
+        { CURLOPT_RESOLVE    10203 }
+        { CURLOPT_TLSAUTH_USERNAME    10204 }
+        { CURLOPT_TLSAUTH_PASSWORD    10205 }
+        { CURLOPT_TLSAUTH_TYPE    10206 }
+        { CURLOPT_ACCEPTTIMEOUT_MS    212 }
+        { CURLOPT_TCP_KEEPALIVE    213 }
+        { CURLOPT_TCP_KEEPIDLE    214 }
+        { CURLOPT_TCP_KEEPINTVL    215 }
+        { CURLOPT_SSL_OPTIONS    216 }
+        { CURLOPT_DNS_INTERFACE    10221 }
+        { CURLOPT_DNS_LOCAL_IP4    10222 }
+        { CURLOPT_DNS_LOCAL_IP6    10223 }
+        { CURLOPT_SSL_ENABLE_NPN    225 }
+        { CURLOPT_SSL_ENABLE_ALPN    226 }
+        { CURLOPT_EXPECT_100_TIMEOUT_MS    227 }
+        { CURLOPT_HEADEROPT    229 }
+    }
+    
+    lassign {} curlOptCfg curlOptCfgKeys    
+    if { [keylget protoList CURLOPTIONS curlOptCfg] } {
+        set curlOptCfgKeys [keylget curlOptCfg]
+        if { ![lempty $curlOptCfgKeys] } {
+            foreach key $curlOptCfgKeys {
+                if { ![keylget curlOptList $key val] } {
+                lappend	warnList "$warnString: invalid cURL option \"$key\"."
+                }
+            }
+            foreach key $curlOptCfgKeys {
+                if { ![keylget curlOptSupport $key val] } {
+                lappend	warnList "$warnString: unsupported cURL option \"$key\" for user."
+                }
+            }
+        }
+    }
+}
+
+#######################################################################
+# CHD:badTcpServerPort - check all the TCP/IP port numbers to make sure 
+#                        if same port is configured in more than one places 
+# Args:
+#	dataArrayVar		= name of array	containing host	data
+#	warnTextVar			= warning text variable
+# Returns:
+#
+proc CHD:badTcpServerPort { warnListVar dataArrayVar } {
+    upvar $warnListVar warnList
+    upvar $dataArrayVar	hostArray	;# attach to host array
+
+    set iclProtocolPort {}
+    set serverProtocolPort {}
+
+    foreach i [array names hostArray] {	
+        if { [lsearch -exact [keylkeys hostArray($i)] "CLOVERLEAF_INTERSITE_DEST" ] != -1 } { 
+            #skip inter-site destination checking
+            continue 
+        }  
+        # Get the server port list
+        if [keylget hostArray($i) PROTOCOL protoList] {
+            if { [keylget protoList  ISSERVER   isServerValue] && $isServerValue} {
+                keylget protoList  PORT portValue
+                keylset serverProtocolPort $i $portValue
+            }
+        }
+        # Get the icl port list
+        keylget hostArray($i) ICLSERVERPORT iclPortValue
+        if { [string length $iclPortValue] != 0 } {
+            keylset iclProtocolPort $i $iclPortValue
+        }
+    }
+    
+    CHD:checkServerPort iclProtocolPort serverProtocolPort warnList
+    CHD:checkIclPort iclProtocolPort serverProtocolPort warnList
+}
+
+#######################################################################
+# CHD:checkIclPort - check all the ICL server port numbers to make sure 
+#                    if one port is used twice 
+# Args:
+#	iclProtocolPortVar		= The keyed list with 'protocol name' as the key and 'icl server port' as the value
+#	serverProtocolPortVar	= The keyed list with 'protocol name' as the key and 'tcp server port' as the value
+#	warnTextVar				= warning text variable
+# Returns:
+#
+proc CHD:checkIclPort { iclProtocolPortVar serverProtocolPortVar warnListVar } {
+    upvar $warnListVar warnList
+    
+    upvar $iclProtocolPortVar iclProtocolPort			;# The keyed list with 'protocol name' as the key and 'icl server port' as the value
+    set iclNameList [keylkeys iclProtocolPort]			;# List all the protocol names in iclNameList
+    set iclPortList {}									;# List all the icl server ports in the iclPortList
+    foreach i $iclNameList {
+        keylget iclProtocolPort $i port
+        lappend iclPortList $port
+    }
+
+    upvar $serverProtocolPortVar serverProtocolPort		;# The keyed list with 'tcpip server protocol name' as the key and 'tcp server port' as the value
+    set serverNameList [keylkeys serverProtocolPort]	;# List all the tcpip server protocol names in serverNameList
+    set serverPortList {}								;# List all the tcpip server ports in the serverPortList
+    foreach i $serverNameList {
+        keylget serverProtocolPort $i port
+        lappend serverPortList $port
+    }
+
+    foreach i $iclNameList {
+        keylget iclProtocolPort $i port
+        set findIndexList [ lsearch -all $iclPortList $port ]
+        foreach findIndex $findIndexList {
+            set compareProtocol [lindex $iclNameList $findIndex]
+            if { [string compare $i $compareProtocol ] != 0 } {
+                lappend warnList "Protocol Thread $i, ICL Server Port Issue: port '$port' is duplicated in another icl server ($compareProtocol)"  
+            }
+        }
+        set findIndexList [ lsearch -all $serverPortList $port ]
+        foreach findIndex $findIndexList {
+            set compareProtocol [lindex $serverNameList $findIndex]
+            if { [string compare $i $compareProtocol ] != 0 } {
+                lappend warnList "Protocol Thread $i, ICL Server Port Issue: port '$port' is duplicated in another tcp server ($compareProtocol)"  
+            }
+        }
+    }
+}
+
+#######################################################################
+# CHD:checkServerPort - check all the tcpip server port numbers to make sure 
+#                       if one port is used twice 
+# Args:
+#	iclProtocolPortVar		= The keyed list with 'protocol name' as the key and 'icl server port' as the value
+#	serverProtocolPortVar	= The keyed list with 'protocol name' as the key and 'tcp server port' as the value
+#	warnTextVar				= warning text variable
+# Returns:
+#
+proc CHD:checkServerPort { iclProtocolPortVar serverProtocolPortVar warnListVar } {
+    upvar $warnListVar warnList
+    
+    upvar $iclProtocolPortVar iclProtocolPort			;# The keyed list with 'protocol name' as the key and 'icl server port' as the value
+    set iclNameList [keylkeys iclProtocolPort]			;# List all the protocol names in iclNameList
+    set iclPortList {}									;# List all the icl server ports in the iclPortList
+    foreach i $iclNameList {
+        keylget iclProtocolPort $i port
+        lappend iclPortList $port
+    }
+
+    upvar $serverProtocolPortVar serverProtocolPort		;# The keyed list with 'tcpip server protocol name' as the key and 'tcp server port' as the value
+    set serverNameList [keylkeys serverProtocolPort]	;# List all the tcpip server protocol names in serverNameList
+    set serverPortList {}								;# List all the tcpip server ports in the serverPortList
+    foreach i $serverNameList {
+        keylget serverProtocolPort $i port
+        lappend serverPortList $port
+    }
+
+    foreach i $serverNameList {
+        keylget serverProtocolPort $i port
+        set findIndexList [ lsearch -all $iclPortList $port ]
+        foreach findIndex $findIndexList {
+            set compareProtocol [lindex $iclNameList $findIndex]
+            lappend warnList "Protocol Thread $i, TCP Server Port Issue: port '$port' is duplicated in another icl server ($compareProtocol)"  
+        }
+        set findIndexList [ lsearch -all $serverPortList $port ]
+        foreach findIndex $findIndexList {
+            set compareProtocol [lindex $serverNameList $findIndex]
+            if { [string compare $i $compareProtocol ] != 0 } {
+                lappend warnList "Protocol Thread $i, TCP Server Port Issue: port '$port' is duplicated in another tcp server ($compareProtocol)"  
+            }
+        }
+    }
+}
+
+#######################################################################
+# CHD:dbProtocolSetting - check DB protocol common settings
+# Args:
+#	protoList		= protocol keyed list
+#	protoName		= protocol name
+#	warnTextVar
+# Returns:
+#
+proc CHD:dbProtocolSetting { protoList protoName warnTextVar } {
+    upvar $warnTextVar warnList
+
+    global HciSiteDir HciMasterSiteDir
+
+    # Check DB_CONNECTION
+    keylget protoList DB_CONNECTION dbConnection
+    if {![cequal $dbConnection {}]} {
+        set connFile $HciSiteDir/dbconfiguration.ini
+        if {![file exists $connFile]} {
+            # site level dbconfiguration.ini doesn't exist
+            if {[cequal $HciMasterSiteDir {}]} {
+                # master site isn't defined
+                lappend warnList "$protoName: DB Schema 'dbconfiguration.ini' doesn't exist in site and master site is not defined."
+            } else {
+                set connMasterFile $HciMasterSiteDir/dbconfiguration.ini
+                if {![file exists $connMasterFile]} {
+                    # master site dbconfiguration.ini doesn't exist
+                    lappend warnList "$protoName: DB Schema 'dbconfiguration.ini' doesn't exist in site and master site."
+                } else {
+                    if {![file readable $connMasterFile]} {
+                        # master site dbconfiguration.ini isn't readable
+                        lappend warnList "$protoName: DB Schema 'dbconfiguration.ini' doesn't exist in site and '$connMasterFile' is not readable."
+                    } else {
+                        set found 0
+                        set inFile [open $connMasterFile r]
+                        while { [gets $inFile line] >= 0 } {
+                            # skip blank lines and comments...
+                            if { [string trim $line] == "" } { continue }
+                            if { [cindex $line 0] == "\#" }  { continue }
+                            if { [cequal $line \[$dbConnection\]]} {
+                                set found 1
+                            }
+                        }
+                        if {!$found} {
+                            # Cannot find DB_CONNECTION in master site dbconfiguration.ini
+                            lappend warnList "$protoName DB_CONNECTION: $dbConnection is not found in $connMasterFile."
+                        }
+                    }
+                }
+            }
+        } else {
+            # site level dbconfiguration.ini exists
+            if {![file readable $connFile]} {
+                # site level dbconfiguration.ini is not readable, try master site
+                if {[cequal $HciMasterSiteDir {}]} {
+                    # master site isn't defined
+                    lappend warnList "$protoName: DB Schema $connFile is not readable and master site is not defined."
+                } else {
+                    set connMasterFile $HciMasterSiteDir/dbconfiguration.ini
+                    if {![file exists $connMasterFile]} {
+                        # master site dbconfiguration.ini doesn't exist
+                        lappend warnList "$protoName: DB Schema $connFile is not readable and $connMasterFile doesn't exist."
+                    } else {
+                        if {![file readable $connMasterFile]} {
+                            # master site dbconfiguration.ini isn't readable
+                            lappend warnList "$protoName: DB Schema Both $connFile and $connMasterFile are not readable."
+                        } else {
+                            set found 0
+                            set inFile [open $connMasterFile r]
+                            while { [gets $inFile line] >= 0 } {
+                                # skip blank lines and comments...
+                                if { [string trim $line] == "" } { continue }
+                                if { [cindex $line 0] == "\#" }  { continue }
+                                if { [cequal $line \[$dbConnection\]]} {
+                                    set found 1
+                                }
+                            }
+                            if {!$found} {
+                                # Cannot find DB_CONNECTION in master site dbconfiguration.ini
+                                lappend warnList "$protoName DB_CONNECTION: $dbConnection is not found in $connMasterFile and $connFile is not readable."
+                            }
+                       }
+                   }
+                }
+            } else {
+                # site level dbconfiguration.ini exists and is readable.
+                set found 0
+                set inFile [open $connFile r]
+                while { [gets $inFile line] >= 0 } {
+                    # skip blank lines and comments...
+                    if { [string trim $line] == "" } { continue }
+                    if { [cindex $line 0] == "\#" }  { continue }
+                    if { [cequal $line \[$dbConnection\]]} {
+                        set found 1
+                    }
+                }
+                if {!$found} {
+                    # Cannot find DB_CONNECTION in site dbconfiguration.ini, try master one
+                   if {[cequal $HciMasterSiteDir {}]} {
+                        # master site isn't defined
+                        lappend warnList "$protoName DB_CONNECTION: $dbConnection is not found in $connFile and master site is not defined."
+                   } else {
+                        set connMasterFile $HciMasterSiteDir/dbconfiguration.ini
+                        if {![file exists $connMasterFile]} {
+                            # master site dbconfiguration.ini doesn't exist
+                            lappend warnList "$protoName DB_CONNECTION: $dbConnection is not found in $connFile and $connMasterFile doesn't exist."
+                        } else {
+                            if {![file readable $connMasterFile]} {
+                                # master site dbconfiguration.ini isn't readable
+                                lappend warnList "$protoName DB_CONNECTION: $dbConnection is not found in $connFile and $connMasterFile is not readable."
+                            } else {
+                                set found 0
+                                set inFile [open $connMasterFile r]
+                                while { [gets $inFile line] >= 0 } {
+                                    # skip blank lines and comments...
+                                    if { [string trim $line] == "" } { continue }
+                                    if { [cindex $line 0] == "\#" }  { continue }
+                                    if { [cequal $line \[$dbConnection\]]} {
+                                        set found 1
+                                    }
+                               }
+                               if {!$found} {
+                                   # Cannot find DB_CONNECTION in master site dbconfiguration.ini
+                                   lappend warnList "$protoName DB_CONNECTION: $dbConnection is not found in $connFile and $connMasterFile"
+                               }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        lappend warnList "$protoName: DB_CONNECTION cannot be empty"
+    }
+
+    # Check DB_SCHEMA
+    keylget protoList DB_SCHEMA dbSchema
+    if {![cequal $dbSchema {}]} {
+        foreach i $dbSchema { 
+            set xmlFile $HciSiteDir/formats/dbschema/$dbConnection/$i.xml;
+            if {![file exists $xmlFile]} {
+                if {[cequal $HciMasterSiteDir {}]} { 
+                    lappend warnList "$protoName: DB Schema '$xmlFile' doesn't exist in site and master site is not defined."
+                } else {
+                    set xmlFile $HciMasterSiteDir/formats/dbschema/$dbConnection/$i.xml;
+                    if {![file exists $xmlFile]} {
+                        lappend warnList "$protoName: DB Schema '$xmlFile' doesn't exist in site and master site."
+                    } else {
+                        if {![file readable $xmlFile]} {
+                            lappend warnList "$protoName: DB Schema '$xmlFile' is not readable."
+                        }
+                    }
+                }
+            } else {
+                if {![file readable $xmlFile]} {
+                    lappend warnList "$protoName: DB Schema '$xmlFile' is not readable."
+                }
+            }
+            set vrlFile $HciSiteDir/formats/dbschema/$dbConnection/$i.vrl;
+            if {![file exists $vrlFile]} {
+                if {[cequal $HciMasterSiteDir {}]} { 
+                    lappend warnList "$protoName: DB Schema '$vrlFile' doesn't exist in site and master site is not defined."
+                } else {
+                    set vrlFile $HciMasterSiteDir/formats/dbschema/$dbConnection/$i.vrl;
+                    if {![file exists $vrlFile]} {
+                        lappend warnList "$protoName: DB Schema '$vrlFile' doesn't exist in site and master site."
+                    } else {
+                        if {![file readable $vrlFile]} {
+                            lappend warnList "$protoName: DB Schema '$vrlFile' is not readable."
+                        }
+                    }
+                }
+            } else {
+                if {![file readable $vrlFile]} {
+                    lappend warnList "$protoName: DB Schema '$vrlFile' is not readable."
+                }
+            }
+        }
+    } else {
+        keylget protoList TYPE type
+        if {[cequal $type "database-outbound"]} {
+            lappend warnList "$protoName: DB_SCHEMA cannot be empty"
+        }
+    }
+
+    if {[keylget protoList JAVA java] && ![cequal $java {}]} {
+        if {[keylget java DRIVER driver] && ![cequal $driver {}]} {
+            # check DRIVERTYPE = class
+            if {[keylget driver DRIVERTYPE driverType]} {
+                if {![cequal $driverType {class}]} {
+                    lappend warnList "$protoName: DRIVERTYPE should be 'class'"
+                }
+            } else {
+                lappend warnList "$protoName: DRIVERTYPE cannot be empty"
+            }
+            # Check INITMETHOD
+            if {[keylget driver INITMETHOD initMethod]} {
+                if {![cequal $initMethod {doInit}]} {
+                    lappend warnList "$protoName JAVA DRIVER: INITMETHOD should be 'doInit'"
+                }
+            } else {
+                lappend warnList "$warnString JAVA DRIVER: INITMETHOD cannot be empty"
+            }
+            # Check STOPMETHOD
+            if {[keylget driver STOPMETHOD stopMethod]} {
+                if {![cequal $stopMethod {doStop}]} {
+                    lappend warnList "$protoName JAVA DRIVER: STOPMETHOD should be 'doStop'"
+                }
+            } else {
+                lappend warnList "$protoName: STOPMETHOD cannot be empty"
+            }
+        } else {
+            lappend warnList "$protoName JAVA: DRIVER cannot be empty"
+        }
+
+        # Check MEM_MAX and MEM_MIN
+        if {[keylget java JVM jvm]} {
+            if {[keylget jvm MEM_MAX memMax] && ![cequal $memMax {}]} {
+                if {[CHD:notNumeric $memMax pure warnText] } {
+                    lappend warnList "$protoName MEM_MAX: $warnText"
+                    set memMax 128
+                } else {
+                    if {($memMax < 32) || ($memMax > 1000)} {
+                        lappend warnList "$protoName: MEM_MAX $memMax is not in range 32-1000"
+                    }
+                }
+            } else {
+                set memMax 128
+            }
+            
+            if {[keylget jvm MEM_MIN memMin] && ![cequal $memMin {}]} {
+                if {[CHD:notNumeric $memMin pure warnText] } {
+                    lappend warnList "$protoName MEM_MIN: $warnText"
+                    set memMin 64
+                } else {
+                    if {($memMin < 32) || ($memMin > 1000)} {
+                        lappend warnList "$protoName: MEM_MIN $memMin is not in range 32-1000"
+                    }
+                }
+            } else {
+                set memMin 64
+            }
+            
+            if {$memMin > $memMax} {
+                lappend warnList "$protoName: MEM_MIN $memMin should not larger than MEM_MAX $memMax"
+            }
+        }
+    } else {
+        lappend warnList "$protoName: JAVA cannot be empty"
+    }
+
+}
+
+#######################################################################
+# CHD:dbActionSetting - check DB protocol action settings
+# Args:
+#    actionList       = db protocol action list
+#    actionName       = action name
+#    protoName        = protocol name
+#    mode             = 1: the action is required,check content and type
+#                     = 0: the action is optional,check type when content is not empty
+#    warnTextVar
+# Returns:
+#
+proc CHD:dbActionSetting { actionList actionName protoName mode warnTextVar } {
+    upvar $warnTextVar warnList
+    if {[cequal $actionList {}] && $mode} {
+        lappend warnList "$protoName: $actionName cannot be empty"
+        return 1;
+    }
+
+    # Check CONTENT
+    if {[keylget actionList CONTENT content]} {
+        if {[cequal $content {}] } {
+            if {$mode} {
+                lappend warnList "$protoName $actionName: CONTENT cannot be empty"
+                return 1;
+            }
+        } else {
+            # Check TYPE
+            if {![keylget actionList TYPE type] || [cequal $type {}]} {
+                lappend warnList "$protoName $actionName: Type cannot be empty"
+                return 1;
+            }
+            if {[CHD:notNumeric $type pure warnText]} {
+                lappend warnList "$protoName: $warnText"
+                return 1;
+            }
+            if {($type != 0) && ($type != 1)} {
+                lappend warnList "$protoName $actionName: TYPE should be 0 or 1"
+                return 1;
+            }
+        }
+    } else {
+        if {$mode} {
+            lappend warnList "$protoName $actionName: CONTENT cannot be empty"
+            return 1;
+        }
+    }
+    return 0;
+}
+
+#@packend
+
+
+#@package: threadData curNetFormatVersion updateProtoThreadList findLogicalName
+
+# $Id: threadData.tcl,v 1.49 2012/05/09 01:17:42 vli Exp $
+#
+# threadData.tcl - code to initialize and update thread config keyed lists
+#
+# Copyright (c) 1993-1997, Healthcare Communication, Inc.
+# All rights reserved.
+#
+# Exported Procedures:
+#	curNetFormatVersion 	- get the `current' net file format version
+#	findLogicalName		- symbolic -> logical mapping
+#	updateProtoThreadList	- update a thread's config list
+#
+
+#######################################################################
+# curNetFormatVersion - get the `current' net file format version
+# Returns:
+#	The current version number
+#
+# Notes:
+#	This value should be updated whenever a change (modification or
+#	additon) is made to the host config list.
+#
+#	While it may seem a little strange to have a proc do nothing
+#	but return a constant, it seemed the only way to bury this data
+#	in a library and have available upon demand.
+#
+# PACKAGE-EXPORT: curNetFormatVersion
+
+proc curNetFormatVersion {} {
+    return 3.10
+}
+
+
+#######################################################################
+# updateProtoThreadList - update a protocol theread's configuration list
+# Args:
+#	inVar		= input  variable name
+#	outVar		= output variable name
+#
+# Notes:
+#	It is assumed that the input list has at least the SYMNAME value
+#	set.  As there is no way to preset a reasonable default value
+#	for this, this proc errors out if this key is not present.
+#
+# PACKAGE-EXPORT:  updateProtoThreadList
+
+proc updateProtoThreadList { inVar outVar } {
+    upvar $inVar inList $outVar outList
+
+    global HciSite
+    global HciRootDir
+    global platformcap
+    set outList {}					;# start empty
+ 
+    if [ catch { option get . largeBrandLogo " " } defaultIcon ] {
+	set defaultIcon "unknown.xpm"
+    }
+
+    # keyList is used to check the top-level contents of a host's config
+    # list.  If a given key does not exist, it is created w/ the given
+    # default value.  If a key is already present and a proc is
+    # specified, the proc is called with a reference to the current
+    # data; upon its return the data in the variable will become the
+    # new value associated with the key.
+    #
+    # Keys with static sub-keys are enumerated by sub-key so
+    # missing sub-keys will get added; values with variable sub-keys
+    # (e.g., PROTOCOL) are all-or-nothing.
+    #
+    #	 name				default		conversion-proc
+
+    set keyList [list							\
+	"AUTOSTART			1"				\
+	"BITMAP				$defaultIcon"  \
+	"COORDS				{0 0}"				\
+	"CURXACTION			{}"				\
+									\
+	"DATAFORMAT {
+					{ FRLTYPE offlen }
+					{ OFFLEN {
+					    { LEN 0 }
+					    { OFF 0 }
+					}}
+					{ TYPE frl }
+	}"								\
+									\
+	"DATAXLATE			{}		TD:downcaseXlt"	\
+	"EOCONFIG			{}"				\
+        "GATEWAYTHREADTYPE              {external}"                     \
+	"GROUPS				{}		TD:downcaseStr"	\
+	"HOSTDOWN			0"				\
+	"ICLSERVERPORT			{}"				\
+	"KEEPMSGONDISK			0"				\
+	"OUTBOUNDONLY			0"				\
+	"PROCESSNAME			[file tail $HciSite]"	        \
+	"PROTOCOL {
+					{ TYPE file }
+					{ INFILE \
+					  [keylget platformcap DEV_NULL] }
+					{ INFORMAT nl}
+					{ INDELAY 0}
+					{ OUTFILE \
+					  [keylget platformcap DEV_NULL] }
+					{ OUTFILE \
+					  [keylget platformcap DEV_NULL] }
+					{ OUTFORMAT nl}
+					{ OUTAPPEND 0}
+					{ RECONNECT 0}
+	}						TD:fixProtocol"	\
+									\
+	"RECVCONTROL.MSGPRIO		5120		TD:changePrio"	\
+	"RECVCONTROL.EOMSG		{}"				\
+	"RECVCONTROL.ACKCONTROL.PROCS	{}"				\
+	"RECVCONTROL.ACKCONTROL.ARGS	{}"				\
+									\
+	"REPLYFORMAT {
+					{ FRLTYPE offlen }
+					{ OFFLEN {
+					    { LEN 0 }
+					    { OFF 0 }
+					}}
+					{ TYPE frl }
+	}"								\
+									\
+	"REPLYCONTROL.REPLYGEN		{
+					{ TYPE none }
+	}						TD:fixReplyGen"	\
+	"REPLYCONTROL.TIMEOUT		-1		TD:zero2minus1"	\
+	"REPLYCONTROL.WAIT		0"				\
+									\
+	"REPLYXLATE			{}		TD:downcaseXlt"	\
+									\
+	"SAVEMSGS.INSAVE		0"				\
+	"SAVEMSGS.INFILE		{}"				\
+	"SAVEMSGS.OUTSAVE		0"				\
+	"SAVEMSGS.OUTFILE		{}"				\
+	"SAVEMSGS.SAVEINARCHIVE		0"				\
+	"SAVEMSGS.INARCHIVE		{}"				\
+	"SAVEMSGS.SAVEOUTARCHIVE	0"				\
+	"SAVEMSGS.OUTARCHIVE		{}"				\
+	                                \
+	"SCHEDULE               {}"     \
+									\
+	"SENDDATACTRL.FAILPROCS.ARGS	{}"				\
+	"SENDDATACTRL.FAILPROCS.PROCS	{}"				\
+	"SENDDATACTRL.FWDTHREAD		{}		TD:downcaseStr"	\
+	"SENDDATACTRL.FORWARDTHREAD	{}		TD:downcaseStr"	\
+	"SENDDATACTRL.HOLDMSGS		0"				\
+	"SENDDATACTRL.INTERVAL		10"				\
+	"SENDDATACTRL.OKPROCS.ARGS	{}"				\
+	"SENDDATACTRL.OKPROCS.PROCS	{}"				\
+	"SENDDATACTRL.PREWRITEPROCS.ARGS	{}"			\
+	"SENDDATACTRL.PREWRITEPROCS.PROCS	{}"			\
+	"SENDDATACTRL.RETRIES		-1"				\
+									\
+	"SENDREPLYCTRL.FAILPROCS.ARGS	{}"				\
+	"SENDREPLYCTRL.FAILPROCS.PROCS	{}"				\
+	"SENDREPLYCTRL.FWDTHREAD	{}		TD:downcaseStr"	\
+	"SENDREPLYCTRL.FORWARDTHREAD	{}		TD:downcaseStr"	\
+	"SENDREPLYCTRL.HOLDMSGS		0"				\
+	"SENDREPLYCTRL.INTERVAL		10"				\
+	"SENDREPLYCTRL.OKPROCS.ARGS	{}"				\
+	"SENDREPLYCTRL.OKPROCS.PROCS	{}"				\
+	"SENDREPLYCTRL.PREWRITEPROCS.ARGS	{}"			\
+	"SENDREPLYCTRL.PREWRITEPROCS.PROCS	{}"			\
+	"SENDREPLYCTRL.RETRIES		-1"				\
+									\
+	"SMS.FWD_DATA.PROCS		{}"				\
+	"SMS.FWD_DATA.ARGS		{}"				\
+	"SMS.FWD_REPLY.PROCS		{}"				\
+	"SMS.FWD_REPLY.ARGS		{}"				\
+	"SMS.IN_DATA.PROCS		{}"				\
+	"SMS.IN_DATA.ARGS		{}"				\
+	"SMS.IN_REPLY.PROCS		{}"				\
+	"SMS.IN_REPLY.ARGS		{}"				\
+	"SMS.OUT_DATA.PROCS		{}"				\
+	"SMS.OUT_DATA.ARGS		{}"				\
+	"SMS.OUT_REPLY.PROCS		{}"				\
+	"SMS.OUT_REPLY.ARGS		{}"				\
+									\
+	"STARTPROCS.ARGS		{}"				\
+	"STARTPROCS.PROCS		{}"				\
+									\
+	"USERECOVERDB			1"				\
+    ]
+
+    # SYMNAME _has_ to be there - can't make up a default for it here
+
+    if {[keylget inList  SYMNAME tempVar]} {
+	keylset outList SYMNAME  $tempVar
+    } else {
+	error "thread configuration list missing SYMNAME key"
+    }
+
+    # echo "processing $tempVar..."
+
+    # Now process the rest of the keys
+
+    foreach keyLine $keyList {
+	lassign $keyLine curKey tempVal convertProc
+
+	# See if the key is in the list.  If it isn't, tempVal won't
+	# be changed (i.e., it will still be the default value from the
+	# list)
+
+	if [keylget inList $curKey tempVal] {
+	    if [llength $convertProc] {
+		$convertProc tempVal			;# convert/check it
+	    }
+	}
+
+	# echo "$curKey gets '$tempVal'"
+	keylset outList $curKey $tempVal		;# copy to output
+    }
+}
+
+
+#######################################################################
+# findLogicalName - symbolic -> logical name mapping
+# Args:
+#	searchName			= value we're looking for
+#
+# Returns:
+#	The logical name of the thread w/ the given symbolic name
+#
+# PACKAGE-EXPORT: findLogicalName
+#
+proc findLogicalName { searchName } {
+    global hostData
+
+    foreach threadName [array names hostData] {
+	keylget hostData($threadName) SYMNAME symName
+
+	if { [string compare $symName $searchName] == 0 } {
+	    return $threadName
+	}
+    }
+
+    return ""
+}
+
+
+###################
+# Internal procs...
+
+
+#######################################################################
+# TD:changePrio - update default priority from '0' to 5120
+# Args:		valVar
+
+proc TD:changePrio { valVar } {
+    upvar $valVar val
+
+    if [cequal $val 0] {
+	set val 5120
+    }
+}
+
+
+#######################################################################
+# TD:downcaseStr - downcase the arg
+# Args:		valVar
+
+proc TD:downcaseStr { valVar } {
+    upvar $valVar val
+
+    set val [string tolower $val]
+}
+
+
+#######################################################################
+# TD:downcaseXlt - downcase the route DESTs
+# Args:		valVar
+
+proc TD:downcaseXlt { xlateListVar } {
+    upvar $xlateListVar xlateListIn
+
+    set xlateListOut {}
+    foreach trxidDetailPair $xlateListIn {
+	keylget trxidDetailPair ROUTE_DETAILS detailListIn
+
+	set detailListOut {}
+	foreach detail $detailListIn {
+	    if [keylget detail DEST dest] {
+		keylset detail DEST [string tolower $dest]
+	    }
+
+	    lappend detailListOut $detail
+	}
+
+	keylset trxidDetailPair ROUTE_DETAILS $detailListOut
+	lappend xlateListOut $trxidDetailPair
+    }
+
+    set xlateListIn $xlateListOut
+}
+
+
+#####################################################################
+# TD:fixProtocol - update PROTOCOL entries
+# Args:		valVar	= var to fix
+#
+# Notes:	Non-PDL TCP/IP now supports both binary and ASCII length
+#		encoding.  ENCODE_TYPE specifies 'ascii' or 'binary.'  If
+#		this exists, bail.  Otherwise, assume 'binary' and add
+#		ENCODE_ISNATIVE.
+
+proc TD:fixProtocol { valVar } {
+    upvar $valVar val
+
+    if [keylget val TYPE type] {
+	switch -- $type {
+	    appc {
+		# Before the SYNCLEVEL and AUTOCONFIRM keys were used,
+		# the FLUSH key determined the sync-level.
+		if [keylget val FLUSH] {
+		    set synclevel   none
+		    set autoconfirm 0
+		} else {
+		    set synclevel   confirm
+		    set autoconfirm 1
+		}
+
+		set newKeyList "
+		    { AUTOCONFIRM	$autoconfirm	}
+		    { AUTOCONFIRMED	1		}
+		    { DELAYCONNECT	0	PR-2113 }
+		    { PASSWD		{}		}
+		    { SECURE		0		}
+		    { SYNCLEVEL		$synclevel	}
+		    { USERID		{}		}
+		"
+
+		# Loop through the new keys, adding as needed
+		foreach newKey $newKeyList {
+		    lassign $newKey key dflt
+
+		    if { [keylget val $key {}] == 0 } {
+			keylset val $key $dflt
+		    }
+		}
+	    }
+
+	    fileset {
+		# PR-3136: add IBMAXMSGS if not present
+		if { [keylget val IBMAXMSGS {}] == 0 } {
+		    keylset val IBMAXMSGS 1
+		}
+	    }
+
+	    pdl-async {
+		if { [keylget val REQ_CD {}] == 0 } {
+		    keylset val REQ_CD 1
+		}
+	    }
+
+	    tcpip {
+		# PR-2857: add CLOSE, CONTROLMSGS, and WRITEZERO keys
+		#     key               dflt    comment
+		set newKeyList {
+		    { CLOSE		0	PR-2857	}
+		    { CONTROLMSGS	0	PR-2857	}
+		    { ENCODE_TYPE	binary		}
+		    { ENCODE_INCLUSIVE	1		}
+		    { ENCODE_LEN	4		}
+		    { WRITEZERO		0	PR-2857	}
+		}
+
+		# Loop through the new keys, adding as needed
+		foreach newKey $newKeyList {
+		    lassign $newKey key dflt		;# ignore comment
+
+		    if { [keylget val $key {}] == 0 } {
+			keylset val $key $dflt
+		    }
+		}
+	    }
+	}
+    }
+}
+
+
+#####################################################################
+# TD:fixReplyGen - make empty REPLYGEN lists into type 'none'
+# Args:		valVar	= var to fix
+
+proc TD:fixReplyGen { valVar } {
+    upvar $valVar val
+
+    if [lempty $val] {
+	keylset val TYPE none
+    }
+}
+
+
+#####################################################################
+# TD:zero2minus1 - convert 0s to -1
+# Args:		
+# Args:		valVar	= var to fix
+
+proc TD:zero2minus1 { valVar } {
+    upvar $valVar val
+
+    if [cequal $val 0] {
+	set val -1
+    }
+}
+
+#@packend
+
+
+#@package: netFile nfSave nfLoad
+
+# $Id: netFile.tcl,v 1.33 2012/02/16 03:22:53 sshen Exp $
+#
+# netFile.tcl - Routines for reading and writing NetConfig files
+#
+# Copyright (c) 1993, Healthcare Communication, Inc.  All rights reserved.
+#
+# Exported Procedures:
+#	netSave		- Save a network configuration  to  a file
+#	nfLoad		- Load a network configuration from a file
+
+
+#######################################################################
+# nfSave - Save the current network configuration to a file
+# Args:
+#	fileName		= file to save to
+#	processDataVar		= process data array name
+#	processListVar		= process entries to save
+#	protoThdDataVar		= protocol thread data array name
+#	xlateThdDataVar		= xlate    thread data array name
+#	prologueListVar		= prologue list variable (optional)
+#
+# Returns:
+#	0	= no data changes made
+#	1	= data was modified (updated) during load
+#
+# Notes:
+#	NETFILE:sortBySymname (below) depends upon protoThdData
+#	being named as it.
+#
+# PACKAGE-EXPORT: nfSave
+
+proc nfSave {fileName processDataVar processListVar \
+		 protoThdDataVar xlateThdDataVar { prologueListVar {} }
+} {
+    global HciSiteDir
+    global FileLocking
+
+    upvar				\
+	$processDataVar  processData	\
+	$processListVar  processList	\
+	$protoThdDataVar protoThdData	\
+	$xlateThdDataVar xlateThdData
+
+    # Basic strategy:
+    #   Write new data to a temp file
+    #   cp existing file to backup
+    #   mv temp file over current file
+
+    set tmpfname $HciSiteDir/.ncfgtmp_[pid]
+    set fileId [open $tmpfname w]
+if {[uplevel #0 {info exists EuroBinary}]} {
+    fconfigure $fileId -encoding binary -eofchar {}
+}
+
+    if [catch {
+	putNetPrologue $fileId [curNetFormatVersion] proList
+
+	foreach i [lsort $processList] {
+	    NETFILE:saveEntry $fileId process $i processData($i)
+	}
+
+	foreach i [lsort [array names protoThdData]] {
+		if { [lsearch -exact [keylkeys protoThdData($i)] "CLOVERLEAF_INTERSITE_DEST" ] != -1 } { 
+		#skip inter-site destination checking
+		continue 
+		}
+	    if [keylget protoThdData($i) SYMNAME threadName] {
+		NETFILE:saveEntry $fileId protocol $threadName protoThdData($i)
+	    } else {
+		error "thread '$i' has no SYMNAME value"
+	    }
+	}
+
+	close $fileId
+
+	if { [info exists FileLocking] && $FileLocking } {
+            if { [HaveHieLock $fileName 1] == 0 } {
+	        error "Unable to save file without lock"
+	        return
+	    }
+        }
+
+	# Now that the temp file exists, make a backup and move it in place.
+
+	if [file exists $fileName] {
+	    if { [catch {file copy -force $fileName $fileName.bak} msg] } {
+		unlink -nocomplain $tmpfname
+		error "Unable to make backup file!\n$msg"
+	    }
+	}
+
+	file rename -force $tmpfname $fileName
+    } msg] {
+	global errorCode errorInfo
+
+	set oldErrorInfo $errorInfo
+
+	lassign $errorCode errType errVal errMsg
+	if [cequal $errType "POSIX"] {
+	    set msg $errMsg
+	}
+
+	# Close the file and remove it to both free up the space and remove
+	# whatever got written.
+
+	catch { close $fileId }
+	unlink -nocomplain $tmpfname
+
+	error $msg $oldErrorInfo
+    }
+
+    if [llength $prologueListVar] {
+	uplevel "set $prologueListVar [list $proList]"
+    }
+}
+
+#######################################################################
+# nfLoad - Load a network configuration from a file
+# Args:
+#	fileName		= file to load from
+#	processDataVar		= process data array name
+#	protoThdDataVar		= protocol thread data array name
+#	xlateThdDataVar		= xlate    thread data array name
+#	prologueListVar		= prologue list variable (optional)
+#
+# Returns:
+#	0	= no data changes made
+#	1	= data was modified (updated) during load
+#
+# PACKAGE-EXPORT: nfLoad
+
+proc nfLoad {
+    fileName processDataVar protoThdDataVar xlateThdDataVar
+    { prologueListVar {} }
+} {
+    upvar				\
+	$processDataVar  processData	\
+	$protoThdDataVar protoThdData	\
+	$xlateThdDataVar xlateThdData
+
+    global HciRootDir
+    global FileLocking
+
+    if { [info exists FileLocking] && $FileLocking } {
+        set getlock [AcquireHieLock $fileName]
+        if { $getlock == 0 } {
+	    error "Cannot lock file"
+	}
+    }
+
+    set fileId [open $fileName r]
+    # 5.5MB and later java gui/ide makes netconfig files in utf-8 so set encoding
+    fconfigure $fileId -encoding utf-8
+if {[uplevel #0 {info exists EuroBinary}]} {
+    fconfigure $fileId -encoding binary -eofchar {}
+}
+
+    set curLibVers [curNetFormatVersion]
+
+    set updateVers 0					;# assume correct vers
+
+    if [getNetVersion $fileId fileVers proList] {
+	if { $fileVers < $curLibVers } {
+	    if [string match 1.* $fileVers] {
+		error "Cannot load HCI-LINK v2.1 file; use hcinetconvert"
+	    }
+
+	    set msgString "$fileName is format $fileVers.  "
+	    append msgString "It will be updated to $curLibVers when saved."
+
+	    popupError $msgString Information
+
+	    set updateVers 1
+	}
+
+	if { $fileVers > $curLibVers } {
+	    set    msgString "File format is $fileVers; "
+	    append msgString "the current current version is $curLibVers.  "
+	    append msgSTring "Load aborting."
+
+	    catch { close $fileId }
+	    error $msgString
+	}
+    } else {
+	catch { close $fileId }
+	error "Unable to fetch version from $fileName.  Load aborting."
+    }
+
+    if [llength $prologueListVar] {
+	uplevel "set $prologueListVar [list $proList]"
+    }
+
+    set entryNum 0
+
+    while { [eof $fileId] == 0 } {
+	if [catch { lgets $fileId inLine } msg ] {
+	    popupError "Error reading entry $entryNum from $fileName:\n$msg"
+	    continue
+	}
+
+	if [lempty $inLine] {
+	    continue					;# ignore empties
+	}
+
+	incr entryNum
+
+	# Split the line for processing
+	lassign $inLine entryType entryName entryData
+
+	set entryName [string tolower $entryName]
+
+	switch -exact -- $entryType {
+	    protocol {
+		# Force conversion _every_time_ for now.
+
+		if { 1 || $updateVers } {
+		    if [catch {
+			updateProtoThreadList entryData newData
+		    } msg] {
+			global errorInfo
+			set oldErrorInfo $errorInfo
+
+			append errMsg			\
+			    "Data conversion failed:\n"	\
+			    "$msg\nLoad aborting."
+
+			catch { close $fileId }
+			error $errMsg $oldErrorInfo
+		    }
+
+		    set entryData $newData
+		    
+		    # update bitmap files, if necessary:
+		    # if the bitmap begins with /hci/bitmaps and that
+		    # bitmap file doesn't exist, look for a like-named
+		    # file in the $HCIROOT/bitmaps. This really only
+		    # is necessary for the Cloverleaf 3.0.x -> 3.1 
+		    # upgrade, as that's when we moved the bitmap files
+		    # to the root level.
+
+		    # we probably ought to do something similar to 
+		    # catch problems when a netconfig is moved from
+		    # one root to another -- if the bitmap points
+		    # to a root other than the current root, we
+		    # should change the name. This should be 
+		    # controllable by the user, and there isn't time
+		    # RIGHT NOW to do it, but maybe in the future...
+
+		    # if this all fails, so be it. We don't want
+		    # to screw the calling program
+		    catch {
+			set bitmap "*bogus*"
+			keylget entryData BITMAP bitmap
+			if {[regexp {^/hci/bitmaps/}  $bitmap]} {
+			    regsub {^/hci/bitmaps} $bitmap \
+				"$HciRootDir/bitmaps" rootbitmap
+			    if {![file exists $bitmap] && 
+				[file exists $rootbitmap]} {
+				keylset entryData BITMAP $rootbitmap
+			    }
+			}
+		    }
+		}
+
+		# Fetch symbolic name (or error out)
+		set symName [keylget entryData SYMNAME]
+
+		if {
+		    [dcUniqueNames protoThdData $entryName $symName 0] == 0
+		} {
+		    set    errMsg "Thread name '$entryName/$symName' is not "
+		    append errMsg "unique.\nLoad aborting."
+
+		    GuiBusy 0
+
+		    catch { close $fileId }
+		    error $errMsg
+		}
+
+		set protoThdData($entryName) $entryData
+	    }
+
+	    process {
+		# Force conversion _every_time_ for now.
+		if { 1 || $updateVers } {
+		    if [catch { updateProcessList entryData newData } msg] {
+			global errorInfo
+
+			set oldErrorInfo $errorInfo
+
+			catch { close $fileId }
+			error "Data conversion failed: $msg" $oldErrorInfo
+		    }
+
+		    set entryData $newData
+		}
+
+		if [info exists processData($entryName)] {
+		    error "process '$entryName' already exists"
+		}
+
+		set processData($entryName) $entryData
+	    }
+		destination {
+		
+		set symName $entryName
+
+		if { [dcUniqueNames protoThdData $entryName $symName 0] == 0 } {
+		    set    errMsg "Thread/Destination name '$entryName' is not "
+		    append errMsg "unique.\nLoad aborting."		    
+		    error $errMsg
+		}
+		
+		set desport [keylget entryData PORT]
+		
+		set protoThdData($entryName) {{CLOVERLEAF_INTERSITE_DEST 1}}
+		keylset protoThdData($entryName) SYMNAME $symName
+		keylset protoThdData($entryName) ICLDESPORT $desport
+		
+		}
+	}
+    }
+
+    close $fileId
+
+    return $updateVers
+}
+
+
+########################
+# Internal procedures...
+
+
+#######################################################################
+# NETFILE:makeIndentString - make a tab/space indent string
+# Args:
+#	indentLevel	= indent level counter
+# Notes:
+#	Every two indent levels gets a full tab;
+#	if there's one left over, it gets 4 spaces.
+
+proc NETFILE:makeIndentString { indentLevel } {
+    set indentString [replicate \t [expr $indentLevel / 2]]
+    if { $indentLevel % 2 == 1 } {
+	append indentString [replicate " " 4]
+    }
+
+    return $indentString
+}
+
+
+#######################################################################
+# NETFILE:saveEntry - format and write an entry
+# Args:
+#	fileId		= file handle
+#	entryType	= entry type
+#	entryName	= entry name
+#	entryDataVar	= entry data variable
+
+proc NETFILE:saveEntry { fileId entryType entryName { entryDataVar {} }} {
+    puts -nonewline $fileId "\n$entryType $entryName "		;# header
+
+    if [llength $entryDataVar] {
+	upvar $entryDataVar entryData
+
+	NETFILE:saveKeyedList $fileId $entryType entryData
+    }
+
+    puts $fileId {}						;# newline
+}
+
+
+#######################################################################
+# NETFILE:saveKeyedList - format and write a keyed list
+# Args:
+#	fileId		= file handle
+#	entryType	= entry type
+#	entryDataVar	= entry data variable
+#	indentLevel	= indention level counter (optional)
+
+proc NETFILE:saveKeyedList { fileId entryType entryDataVar { indentLevel 1 }} {
+    global _nfData
+    upvar $entryDataVar entryData
+
+    set LB "\{"
+    set RB "\}"
+
+    set nextIndent [expr $indentLevel + 1]
+
+    set indentString [NETFILE:makeIndentString $indentLevel]
+
+    set keyList [lsort [keylget entryData]]
+
+    # echo keyList is '$keyList'
+
+    if [cequal $keyList {{}}] {
+	puts -nonewline $fileId "${LB}${RB}"
+    } else {
+	puts $fileId "${LB}"
+	foreach keyName $keyList {
+	    puts -nonewline $fileId "${indentString}${LB} $keyName "
+
+	    keylget entryData $keyName keyValue
+
+	    if [info exists _nfData($entryType,$keyName,subkeys)] {
+		NETFILE:saveKeyedList	\
+		    $fileId $entryType,$keyName keyValue $nextIndent
+
+		puts $fileId "${RB}"
+	    } elseif [info exists _nfData($entryType,$keyName,sublists)] {
+		NETFILE:saveSubLists	\
+		    $fileId $entryType,$keyName keyValue $nextIndent
+
+		puts $fileId "${RB}"
+	    } else {
+		puts $fileId "[list $keyValue] ${RB}"
+	    }
+	}
+
+	set prevIndentString [NETFILE:makeIndentString [expr $indentLevel - 1]]
+	puts -nonewline $fileId "${prevIndentString}${RB}"
+    }
+}
+
+
+#######################################################################
+# NETFILE:saveSubLists - format and write a list of keyed list
+# Args:
+#	fileId		= file handle
+#	entryType	= entry type
+#	entryDataVar	= entry data variable
+#	indentLevel	= indention level counter (optional)
+
+proc NETFILE:saveSubLists { fileId entryType entryDataVar { indentLevel 1 }} {
+    global _nfData _nfData
+    upvar $entryDataVar entryData
+
+    # echo "saving '$entryData' as sub-lists"
+
+    set LB "\{"
+    set RB "\}"
+
+    set nextIndent [expr $indentLevel + 1]
+
+    set leadString [NETFILE:makeIndentString $indentLevel]
+
+    puts $fileId "${LB}"
+
+    foreach subList $entryData {
+	# echo "saving '$subList' as a keyed-list"
+	puts -nonewline $fileId ${leadString}
+	NETFILE:saveKeyedList $fileId $entryType subList $nextIndent
+	set leadString " "
+    }
+
+    set prevIndentString [NETFILE:makeIndentString [expr $indentLevel - 1]]
+    puts -nonewline $fileId "\n${prevIndentString}${RB}"
+}
+
+
+#######################################################################
+# NETFILE:sortBySymname - sort two host keys according to their SYMNAME entries
+# Args:
+#	keyOne			= first key
+#	keyTwo			= second key
+#
+# Returns:
+#	-1 if keyOne's SYMNAME comes before keyTwo's
+#	 0 if the SYMNAMEs are the same (better not be!)
+#	+1 if keyTwo's SYMNAME comes before keyOne's
+#
+# Notes:
+#	This proc 'knows' that it is called on behalf of nfSave
+#	and that nfSave keeps its protocol thread configuration
+#	lists in 'protoThdData.'
+
+proc NETFILE:sortBySymname { keyOne keyTwo } {
+    upvar protoThdData protoThdData
+
+    keylget protoThdData($keyOne) SYMNAME nameOne
+    keylget protoThdData($keyTwo) SYMNAME nameTwo
+
+    return [string compare $nameOne $nameTwo]
+}
+
+
+#======================================================================
+# Auto-initialization
+
+    # The _nfData maps file entry types to the keys
+    # with sub-keys.  These values are used by NETFILE:saveKeyedList{},.
+    # above.
+
+    global _nfData
+
+    set _nfData(protocol,DATAFORMAT,subkeys)				1
+    set _nfData(protocol,DATAFORMAT,OFFLEN,subkeys)			1
+    set _nfData(protocol,DATAXLATE,ROUTE_DETAILS,POSTPROCS,subkeys)	1
+    set _nfData(protocol,DATAXLATE,ROUTE_DETAILS,PREPROCS,subkeys)	1
+    set _nfData(protocol,DATAXLATE,ROUTE_DETAILS,PROCS,subkeys)		1
+    set _nfData(protocol,PROTOCOL,subkeys)				1
+    set _nfData(protocol,PROTOCOL,IBDEL,subkeys)			1
+    set _nfData(protocol,PROTOCOL,IBDIRPARSE,subkeys)			1
+    set _nfData(protocol,PROTOCOL,READTPS,subkeys)			1
+    set _nfData(protocol,PROTOCOL,WRITETPS,subkeys)			1
+    set _nfData(protocol,RECVCONTROL,subkeys)				1
+    set _nfData(protocol,RECVCONTROL,ACKCONTROL,subkeys)		1
+    set _nfData(protocol,REPLYCONTROL,subkeys)				1
+    set _nfData(protocol,REPLYCONTROL,REPLYGEN,subkeys)			1
+    set _nfData(protocol,REPLYCONTROL,REPLYGEN,PROCS,subkeys)		1
+    set _nfData(protocol,REPLYFORMAT,subkeys)				1
+    set _nfData(protocol,REPLYFORMAT,OFFLEN,subkeys)			1
+    set _nfData(protocol,REPLYXLATE,ROUTE_DETAILS,POSTPROCS,subkeys)	1
+    set _nfData(protocol,REPLYXLATE,ROUTE_DETAILS,PREPROCS,subkeys)	1
+    set _nfData(protocol,REPLYXLATE,ROUTE_DETAILS,PROCS,subkeys)	1
+    set _nfData(protocol,SAVEMSGS,subkeys)				1
+    set _nfData(protocol,SENDDATACTRL,subkeys)				1
+    set _nfData(protocol,SENDDATACTRL,FAILPROCS,subkeys)		1
+    set _nfData(protocol,SENDDATACTRL,OKPROCS,subkeys)			1
+    set _nfData(protocol,SENDDATACTRL,PREWRITEPROCS,subkeys)		1
+    set _nfData(protocol,SENDREPLYCTRL,subkeys)				1
+    set _nfData(protocol,SENDREPLYCTRL,FAILPROCS,subkeys)		1
+    set _nfData(protocol,SENDREPLYCTRL,OKPROCS,subkeys)			1
+    set _nfData(protocol,SENDREPLYCTRL,PREWRITEPROCS,subkeys)			1
+    set _nfData(protocol,SMS,subkeys)					1
+    set _nfData(protocol,SMS,FWD_DATA,subkeys)				1
+    set _nfData(protocol,SMS,FWD_REPLY,subkeys)				1
+    set _nfData(protocol,SMS,IN_DATA,subkeys)				1
+    set _nfData(protocol,SMS,IN_REPLY,subkeys)				1
+    set _nfData(protocol,SMS,OUT_DATA,subkeys)				1
+    set _nfData(protocol,SMS,OUT_REPLY,subkeys)				1
+    set _nfData(protocol,STARTPROCS,subkeys)				1
+	
+    set _nfData(protocol,DATAXLATE,sublists)				1
+    set _nfData(protocol,DATAXLATE,ROUTE_DETAILS,sublists)		1
+    set _nfData(protocol,REPLYXLATE,sublists)				1
+    set _nfData(protocol,REPLYXLATE,ROUTE_DETAILS,sublists)		1
+
+#@packend
+
+
+#@package: processData pdConvertFromTwoOne updateProcessList
+
+# $Id: processData.tcl,v 1.12 1998/05/22 21:03:44 hcibuild Exp $
+#
+# processData.tcl - code to initialize and update process config keyed lists
+#
+# Copyright (c) 1993, Healthcare Communication, Inc.  All rights reserved.
+#
+# Exported Procedures:
+#	pdConvertFromTwoOne	- convert a 2.1.* 'process' config list
+#	updateProcessList	- check and update a process's config list
+#
+
+
+#######################################################################
+# pdConvertFromTwoOne - convert a 2.1.* 'process' config list
+# Args:
+#	inListVar		= input  variable name
+#	outListVar		= output variable name
+#
+# Notes:
+#	There is no key overlap from 2.1 to 3.0, so this proc
+#	just initializes $outList.
+#
+# PACKAGE-EXPORT: pdConvertFromTwoOne
+#
+proc pdConvertFromTwoOne { inListVar outListVar } {
+    upvar $inListVar inList $outListVar outList
+
+    set outList {}
+}
+
+
+#######################################################################
+# updateProcessList - update a process's configuration list
+# Args:
+#	inVar		= input  variable name (or {})
+#	outVar		= output variable name
+#
+# PACKAGE-EXPORT: updateProcessList
+#
+proc updateProcessList { inVar outVar } {
+    if [lempty $inVar] {
+	set inList {}
+    } else {
+	upvar $inVar inList
+    }
+
+    upvar $outVar outList
+
+    set outList {}					;# start empty
+
+    # keyList is used to check the top-level contents of a process's config
+    # list.  If a given key does not exist, it is created w/ the given
+    # default value.  If a key is already present and a proc is
+    # specified, the proc is called with a reference to the current
+    # data; upon its return the data in the variable will become the
+    # new value associated with the key.
+    #
+    #	 name		default				proc (optional)
+
+    set keyList [list							\
+	"DOMAINNAME	localdomain"					\
+	"EODEFAULT	{}"						\
+	"EOXLATE	{}"						\
+	"HUBNAME	localhub"					\
+	"LOGCYCLESIZE	0"						\
+	"MQSCHANNEL	{}"						\
+	"MQSSERVER	{}"						\
+	"MQSPORT	{}"						\
+	"MSGSPACELIM    0"						\
+	"XLATESTARTMODE	0"						\
+        "XLATE {
+	{ XLATEMIN 0 }
+	{ XLATEMAX 0 }
+	{ XLATEPERCENT 100 }
+        }"                                                              \
+    ]
+
+    # Now we process the rest of the keys
+
+    foreach keyLine $keyList {
+	lassign $keyLine curKey tempVal convertProc
+
+	# See if the key is in the list.  If it isn't, tempVal won't
+	# be changed (i.e., it will still be the default value from the
+	# list)
+	if [keylget inList $curKey tempVal] {
+	    if [llength $convertProc] {
+		$convertProc tempVal			;# convert/check it
+	    }
+	}
+
+	# echo "$curKey gets '$tempVal'"
+	keylset outList $curKey $tempVal		;# copy to output
+    }
+}
+
+#@packend
+
+
+#@package: systemLists listBlowCache listDecNodes listEoAliases listLuItems listPdlScripts listTclProcs listTcpHosts listTcpServices listXltFiles
+
+# $Id: systemLists.tcl,v 1.18 2003/07/16 20:29:51 mpreston Exp $
+#
+# systemLists.tcl - Procs to generate lists from the system
+#
+# Copyright (c) 1993, Healthcare Communication, Inc.  All rights reserved.
+#
+# Exported Procedures:
+#	listDecNodes	- list DECnet nodes
+#	listEoAliases	- list available EO aliases
+#	listLuItems	- list LU config items
+#	listPdlScripts	- list available PDL scripts
+#	listTclProcs	- list available Tcl procs
+#	listTcpHosts	- list TCP/IP hostnames
+#	listTcpServices	- list TCP/IP service names
+#
+#	listBlowCache	- blow list caches
+
+
+#######################################################################
+# listBlowCache - blow list caches
+#
+# PACKAGE-EXPORT: listBlowCache
+#
+proc listBlowCache {} {
+    global _listData
+
+    catch { unset _listData }
+}
+
+
+#######################################################################
+# listDecNodes - list DECnet nodes
+#
+# PACKAGE-EXPORT: listDecNodes
+#
+
+proc listDecNodes {} {
+    upvar #0 _listData(DecNodes) myList
+
+    if ![info exists myList] {
+	set fileId [open /etc/dnethosts r]
+if {[uplevel #0 {info exists EuroBinary}]} {
+	fconfigure $fileId -encoding binary -eofchar {}
+}
+	set myList {}
+
+	while { ![eof $fileId] } {
+	    # Skip empty, white-filled, and #-led lines
+	    if { [gets $fileId lineBuf] == 0 ||
+		 [lempty $lineBuf] ||
+		 [string match #* $lineBuf] } continue
+	    
+	    lappend myList [lvarpop lineBuf]		;# grab name
+	    lvarpop lineBuf				;# discard address
+
+	    foreach i $lineBuf {
+		if [string match #* $i] break		;# grab aliases til
+		lappend myList $i			;# comment found
+	    }
+	}
+
+	close $fileId
+
+	set myList [lsort $myList]
+    }
+
+    return $myList
+}
+
+
+#######################################################################
+# listEoAliases - list available Tcl procs
+# Returns:
+#	Sorted list of available procs
+#
+# Notes:
+#	GenEoAliasList{} does the hard work; this proc simply encaches it
+#
+# PACKAGE-EXPORT: listEoAliases
+
+proc listEoAliases {} {
+    upvar #0 _listData(EoAliases) myList
+
+    if { [info exists myList] == 0 } {
+	set myList [GenEoAliasList]
+    }
+
+    return $myList
+}
+
+
+#######################################################################
+# listLuItems - list LU config items
+# Args:
+#	luType		= LU type (e.g., 'lu6.2', 'lu3', or 'lu2')
+#	itemType	= type of item to list (i.e., 'profile' or 'tpn')
+#	snaTypeVar	= SNA product type (e.g., 'services' or 'server') var
+#			  (optional)
+#
+# Returns:
+#	lists gleaned from exportsna output
+#
+# Notes:
+#	This proc handles requests for both Profile and R/TPN names as both
+#	come from running exportsna.
+#
+#	Connection Profile names are separated by LU type; R/TPN names
+#	are LU type independent.
+#
+# PACKAGE-EXPORT: listLuItems
+#
+
+proc listLuItems { luType itemType { snaTypeVar {} }} {
+    global _listData
+
+    switch -- [string tolower $itemType] {
+	profile {
+	    upvar #0 _listData(LuProf-$luType) myList
+	}
+
+	rtpn {
+	    upvar #0 _listData(LuRtpnList) myList
+	}
+
+	tpn {
+	    upvar #0 _listData(LuTpnList) myList
+	}
+
+	default {
+	    error "bogus itemType '$itemType'"
+	}
+    }
+
+    if ![info exists myList] {
+	# Attach local variables to SNA elements of _listData
+	upvar #0 _listData(LuProf-lu6.2)	luProfList_62	\
+		 _listData(LuProf-lu3)		luProfList_3	\
+		 _listData(LuProf-lu2)		luProfList_2	\
+		 _listData(LuRtpnList)		luRtpnList	\
+		 _listData(LuTpnList)		luTpnList
+
+	# Clear/create all the variables
+	assign_list {} luProfList_62 luProfList_3 luRtpnList luTpnList
+
+	# Run 'exportsna' & grep out the interesting bits.
+	# However, there are two flavors of 'exportsna':
+	#	SNA Services/6000 (obsoleted as of 10/94)
+	#	SNA Server/6000
+	#
+	# SNA Server/6000 ships /bin/sna as an executable; SNA
+	# Services/6000 doesn't.  That is our clue how to run
+	# exportsna and interpret its output.
+
+	if [file executable /bin/sna] {
+	    # Found /bin/sna -- must be SNA Server/6000
+	    #
+	    # Tell exportsna to dump everything w/ '-A'
+	    # Data are presented in type-titled stanzas
+	    # Each stanza line is of the form '<key> = <value>'
+	    # Each stanza is converted into an associative array w/ the
+	    # same key/value pairings.
+	    #
+	    # An empty line signifies the end of a stanza.  Interesting
+	    # data, based on the stanza's 'type,' are extracted.  The
+	    # array is reset for the next stanza.
+
+	    set _listData(SnaType) server
+
+	    set inFP [open "|exportsna -A" r]
+if {[uplevel #0 {info exists EuroBinary}]} {
+    	    fconfigure $inFP -encoding binary -eofchar {}
+}
+	    set inStanza 0
+	    set stanzaType {}
+
+	    while { ![eof $inFP] } {
+		gets $inFP inLine
+
+		set inLine [string trim $inLine]
+
+		# Get stanza type (e.g., 'local_lu_lu6.2:')
+		if [string match *: $inLine] {
+		    set stanzaType $inLine
+		}
+
+		# Try to parse '<key> = <value>'
+		lassign $inLine key equal value
+		if { [cequal $equal "="] && ![lempty $value] } {
+		    set inStanza 1
+		    set myArray($key) $value
+		}
+
+		# Empty line after a stanza -- extract interesting
+		# data from the array
+		if { [lempty $inLine] && $inStanza } {
+		    set inStanza 0
+		    catch {
+			set profileName $myArray(prof_name)
+
+			switch -exact -- $stanzaType {
+			    side_info: {
+				lappend luProfList_62 $profileName
+				lappend luRtpnList $myArray(remote_tp_name)
+			    }
+
+			    session_lu3: {
+				lappend luProfList_3 $profileName
+			    }
+
+			    session_lu2: {
+				lappend luProfList_2 $profileName
+			    }
+
+			    local_tp: {
+				lappend luTpnList $profileName
+			    }
+			}
+
+			catch { unset myArray }
+		    }
+		}
+	    }
+	} else {
+	    # Didn't find /bin/sna -- must be SNA Services/6000
+	    #
+	    # exportsna doesn't need any arguments to dump everything
+	    # Data are presented in titled stanzas
+	    # Stanzas titles (e.g., hubconnect1_CONNECTION:); are ignored
+	    # (they don't match '<string> = <string>')
+	    #
+	    # Each stanza line is of the form '<key> = <value>'
+	    # Each stanza is converted into an associative array w/ the
+	    # same key/value pairings.
+	    #
+	    # An empty line signifies the end of a stanza.  Interesting
+	    # data, based on the stanza's 'type,' are extracted.  The
+	    # array is reset for the next stanza.
+
+	    set _listData(SnaType) services
+
+	    set inFP [open "|exportsna" r]
+if {[uplevel #0 {info exists EuroBinary}]} {
+    	    fconfigure $inFP -encoding binary -eofchar {}
+}
+	    set inStanza 0
+	    while { ![eof $inFP] } {
+		gets $inFP inLine
+
+		if { [lempty $inLine] && $inStanza } {
+		    set inStanza 0
+		    catch {
+			set stanzaType $myArray(type)
+			set profileName $myArray(profile_name)
+
+			switch -- $stanzaType {
+			    CONNECTION {
+				switch -- $myArray(lu_type) {
+				    lu2 {
+					lappend luProfList_2 $profileName
+				    }
+
+				    lu3 {
+					lappend luProfList_3 $profileName
+				    }
+
+				    lu6.2 {
+					lappend luProfList_62 $profileName
+				    }
+				}
+			    }
+
+			    REMOTETPN {
+				lappend luRtpnList $profileName
+			    }
+
+			    TPN {
+				lappend luTpnList $profileName
+			    }
+			}
+
+			catch { unset myArray }
+		    }
+		}
+
+		assign_list $inLine key equal value
+		if [cequal $equal "="] {
+		    set inStanza 1
+		    set myArray($key) $value
+		}
+	    }
+	}
+
+	if { [catch {close $inFP} emsg] } {
+	    popupError "$emsg\n\nSNA is probably not installed"
+	}
+    }
+
+    # Tell the user which SNA product is involved
+    if [llength $snaTypeVar] {
+	upvar $snaTypeVar snaType
+	set snaType $_listData(SnaType)
+    }
+
+    return $myList
+}
+
+
+#####################################################################
+# listPdlScripts - list available PDL scripts
+# Args:		void
+# Returns:	sorted list of available PDL scripts
+# Notes:	
+#
+# PACKAGE-EXPORT: listPdlScripts
+#
+
+proc listPdlScripts {} {
+    upvar #0 _listData(PdlScripts) myList
+
+    if { [info exists myList] == 0 } {
+	set myList [GenPdlList]
+    }
+
+    return $myList
+}
+
+
+
+#######################################################################
+# listTclProcs - list available Tcl procs
+# Returns:
+#	Sorted list of available procs
+#
+# Notes:
+#	getTclProcList{} does the hard work; this proc simply #	encaches it
+#
+# PACKAGE-EXPORT: listTclProcs
+#
+proc listTclProcs {} {
+    upvar #0 _listData(TclProcs) myList
+
+    if { [info exists myList] == 0 } {
+	set myList [getTclProcList]
+    }
+
+    return $myList
+}
+
+
+#######################################################################
+# listTcpHosts - list TCP/IP hostnames
+# Returns:
+#	list of host names and aliases listed in /etc/hosts
+#
+# PACKAGE-EXPORT: listTcpHosts
+#
+proc listTcpHosts {} {
+    upvar #0 _listData(TcpHosts) myList
+    global tcl_platform
+    global env
+
+    if {[windows_platform]} {
+	if {[info exists env(SystemRoot)]} {
+		set hostFile $env(SystemRoot)/system32/drivers/etc/HOSTS
+	} else {
+		# uh-oh, SystemRoot isn't set - let's just try the current drive
+		set hostFile "/winnt/system32/drivers/etc/HOSTS"
+	}
+    } else {
+	set hostFile /etc/hosts
+    }
+
+    if {! [file exists $hostFile]} {
+      set myList ""
+      return $myList
+    }
+
+    if { [info exists myList] == 0 } {
+	set myList {}
+
+	set fileId [open $hostFile r]
+if {[uplevel #0 {info exists EuroBinary}]} {
+    	fconfigure $fileId -encoding binary -eofchar {}
+}
+
+	while { [eof $fileId] == 0 } {
+	    # Skip empty, white-filled, and #-led lines
+	    if { [gets $fileId lineBuf] == 0	||
+		 [lempty $lineBuf]		||
+		 [string match #* $lineBuf]
+	    } {
+		continue
+	    }
+	    
+	    lvarpop lineBuf				;# discard address
+
+	    # Grab alias up to a comment
+
+	    foreach i $lineBuf {
+		if [string match #* $i] {
+		    break
+		}
+
+		lappend myList $i
+	    }
+	}
+
+	close $fileId
+
+	set myList [lsort $myList]
+    }
+
+    return $myList
+}
+
+
+#######################################################################
+# listTcpServices - list TCP service names
+# Returns:
+#	sorted list of service names and aliases listed in /etc/services
+#
+# PACKAGE-EXPORT: listTcpServices
+#
+proc listTcpServices {} {
+    upvar #0 _listData(TcpServices) myList
+    global tcl_platform
+    global env
+
+    if {[windows_platform]} {
+	if {[info exists env(SystemRoot)]} {
+		set svcsFile $env(SystemRoot)/system32/drivers/etc/SERVICES
+	} else {
+		# uh-oh, SystemRoot isn't set - let's just try the current drive
+		set svcsFile "/winnt/systems32/drivers/etc/SERVICES"
+	}
+    } else {
+	set svcsFile /etc/services
+    }
+
+    if {! [file exists $svcsFile]} {
+  	    set myList ""
+	    return $myList
+    }
+
+    if { [info exists myList] == 0 } {
+	set myList {}
+
+	set fileId [open $svcsFile r]
+if {[uplevel #0 {info exists EuroBinary}]} {
+    	fconfigure $fileId -encoding binary -eofchar {}
+}
+
+	while { [eof $fileId] == 0 } {
+	    # Skip empty, white-filled, and #-led lines
+	    if { [gets $fileId lineBuf] == 0	||
+		 [lempty $lineBuf]		||
+		 [string match #* $lineBuf]
+	    } {
+		continue
+	    }
+	    
+	    set servName [lvarpop lineBuf]	;# e.g., NeWS
+	    set portNum  [lvarpop lineBuf]	;# e.g., 540/tcp or 68/udp
+
+	    if [string match */tcp $portNum] {
+		lappend myList $servName		;# keep name
+
+		# Grab aliases up to comment character
+		foreach i $lineBuf {
+		    if [string match #* $i] {
+			break
+		    }
+		    lappend myList $i
+		}
+	    }
+	}
+
+	close $fileId
+
+	set myList [lsort $myList]
+    }
+
+    return $myList
+}
+
+
+######################################################################
+# listXltFiles - list available XLTs
+# Returns:
+#	sorted list of available XLTs
+#
+# PACKAGE-EXPORT: listXltFiles
+#
+proc listXltFiles {} {
+    global HciSiteDir
+
+    upvar #0 _listData(XLTs) myList
+
+    if { [info exists myList] == 0 } {
+	set myList {}
+
+	pushd $HciSiteDir/Xlate
+	set myList [lsort [glob *.xlt]]
+	popd
+    }
+
+    return $myList
+}
+
+
+########################
+# Internal procedures...
+
+
+#======================================================================
+# Auto-initialization
+
+    # Clear the list caches
+    listBlowCache
+
+#@packend
+

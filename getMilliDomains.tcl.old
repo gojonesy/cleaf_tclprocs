@@ -1,0 +1,111 @@
+#!/usr/bin/env tcl
+# Traverses all Netconfigs and returns all of the Millenium ports and outputs what domain they are pointed at in an html document.
+# 03/29/2017 - Jones - Created
+
+
+global HciRoot; set debug 0
+
+# List exclusions
+set siteExcludes {helloworld test}
+
+# Get the sites form the server.ini
+set sites [string map {environs= {}} [exec grep environs $HciRoot/server/server.ini]]
+set sites [lsort [split $sites \;]]
+
+if { $debug } { set sites /hci/cis6.1/integrator/adt_test }
+
+if { $debug } { puts "[clock format [clock scan now] -format {%D %T}] - Site list: $sites" }
+set output {}
+
+# Need to have a mapping that explains which threads equate to which Millenium threads
+# This unfortunately needs hardcoded at present
+keylset map EMR_IA_REG "Test ADT"; keylset map EMR_IA_REGB "Test ADT Build"
+keylset map EMR_IA_MPS "TEST MPS ADT"; keylset map EMR_IS_MPS "TEST MPS Scheduling" 
+keylset map EMR_IO_LAB "TEST LAB Orders"; keylset map EMR_IR_LAB "TEST LAB Results"
+keylset map EMR_IOR_RAD "TEST RAD Orders/Results"; keylset map EMR_IO_RAD "TEST RAD Orders Dolbey"
+keylset map EMR_ID_MDOC "TEST eScription Documents"; keylset map EMR_ID_PWNT "TEST POWERNOTES"; keylset map EMR_IO_BED "TEST Bed Orders" 
+
+# Make up a list of the Keys
+set milliThreads [lsort [keylkeys map]]
+# puts "$milliThreads"
+
+# Loop Over the Sites - 
+foreach site $sites {
+	# Sets up the heading for the site and then table with the table headings.
+	# puts "<h1>$site</h1><table><thead><tr><th>Connection</th><th>Host</th><th>Port</th></thead><tbody>"
+	
+	if {![file isdirectory $site]} {
+	 	  continue 
+	}
+	
+	set site [file tail $site]
+	
+	# Load the site's Netconfig
+	eval [exec $HciRoot/sbin/hcisetenv -root tcl $HciRoot $site]
+	netcfgLoad $HciRoot/$site/NetConfig
+	
+	# Get the Connection list
+	set connList [lsort [netcfgGetConnList]]
+	# if {$debug} { puts "[clock format [clock scan now] -format {%D %T}] - ConnList: $connList" }
+	
+	foreach conn $connList {
+		# Check the thread name for the existence of the EMR_ string
+		
+		if {[lsearch -sorted -exact $milliThreads $conn] > 0 } {
+			# puts "Conn: $conn - Lsearch: [lsearch -sorted -exact $milliThreads $conn]"
+			# Get the port from the Netconfig
+			set data [netcfgGetConnData $conn]
+			keylget data PROTOCOL.PORT port
+			# Cerner Millenium thread found, Get it's endpoint
+			catch {exec netstat -an | grep $port | awk {{print $5,$6}} } serverIp opts
+			# puts "Netstat results: $serverIp, $opts"
+			catch {exec nslookup [lindex [split [lindex $serverIp 0] {:}] 0] | awk -F {=} {{print $2}}} serverName sOpts
+			# puts "$conn - $serverIp"
+			# no longer matching the string. We know we have a milli thread.
+			#if {[string match "mil*" [lindex [split [lindex $serverName 0] {.}] 0] ] } {
+				# puts "Site: $site - Conn: $conn - Server Name: [lindex [split [lindex $serverName 0] {.}] 0] - [lindex $serverIp 1]"
+			#}
+			if {[lindex [split [lindex $serverName 0] {.}] 0] == "child" } {
+				# The thread isn't connected. We will have to get the connection data from the Netconfig
+				set serverName "{No connection}"
+			}
+			lappend output [list $site $conn [lindex [split [lindex $serverName 0] {.}] 0] [lindex $serverIp 1]]
+			
+		}
+		
+	}
+	
+}
+
+# puts "Output: $output"
+# Setup the HTML output
+# Put together the html Styles in order for the output to have a prettier format.
+set tableStyle "\ntable \{ \n\tfont-family: Trebuchet MS, Arial, Helvetica, sans-serif;\n\tborder-collapse: collapse;\n\twidth: 75%;\n\}\n"
+set trStyle "tr:nth-child(even)\{background-color: #f2f2f2;\}\n\n tr:hover \{background-color: #ddd;\}\n"
+set tdStyle "td, th \{ \n\t border: 1px solid #ddd;\n\t padding: 8px;\n\}\n"
+set thStyle "th \{ \n\t padding-top: 12px; \n\t padding-bottom: 12px; \n\t text-align: left; \n\t background-color: #4CAF50; \n\t color: white;\n\}\n"
+
+puts "<!DOCTYPE html><html lang=en><head><title>Current Cerner Millenium Domain Interface Connections in TEST</title>"
+puts "<link type=text/css rel=stylesheet href=css/bootstrap.min.css></head>"
+puts "<body><div class=\"container container-responsive\"><div class=\"row\"><div class=\"col-md-2\"></div><div class=\"col-md-8\">"
+puts "<h1>Cerner Millenium Domain Interface Connections in TEST</h1><br>"
+puts "<h2>Updated at [clock format [clock scan now] -format {%D %T}] </h2><hr>"
+puts "<table class=\"table table-striped table-hover\"><thead><tr><th>Connection</th><th>Environment</th><th>Status</th></thead><tbody>"
+
+
+# puts "Map: $map"
+foreach line $output {
+	# Setup the output here.
+	 # puts "[keylget map [lindex $line 1]] | [lindex $line 2] | [lindex $line 3]"
+	# puts "Line: $line"
+	# Put the output as HTML
+	puts "<tr><td>[keylget map [lindex $line 1]]</td><td>[lindex $line 2]</td>"
+	if {[lindex $line 3] == "ESTABLISHED" } {
+		puts "<td class=success>[lindex $line 3]</td></tr>"
+	} else {
+		puts "<td class=danger>DISCONNECTED</td></tr>"
+	}
+		
+	
+}
+puts "</tbody><table><hr></div></div class=\"col-md-2\"></div></div></body></html>"

@@ -1,0 +1,127 @@
+###################################################################################
+# generic odbc routines
+
+package provide HVodbc 1.0
+
+namespace eval HVodbc {} {
+    package require odbc
+
+    global env
+    global henv hdbc hstmt
+
+    proc connect { dbName dbUser dbPasswd } {
+        global henv hdbc hstmt
+
+        catch { HVodbc::disconnect }
+
+        set rc [odbc SQLAllocEnv henv]
+        set rc [odbc SQLAllocConnect $henv hdbc]
+        set rc [odbc SQLConnect $hdbc $dbName SQL_NTS $dbUser SQL_NTS $dbPasswd SQL_NTS]
+        if {[string equal $rc SQL_ERROR]} {
+            set err [HVodbc::getError 1]
+            echo "Error on connect: $err"
+            return "SQL_ERROR $err"
+        } 
+
+        set rc [odbc SQLAllocStmt $hdbc hstmt]
+        if {[string equal $rc SQL_ERROR]} {
+            echo "Unable to allocate statement."
+            return "SQL_ERROR Unable to allocate statement in connect"
+        }
+    }
+
+    proc disconnect {} {
+        global henv hdbc hstmt
+
+        odbc SQLDisconnect $hdbc
+        odbc SQLFreeHandle SQL_HANDLE_DBC $hdbc
+        odbc SQLFreeEnv $henv
+
+        #echo "INFO - disconnecting from DB"
+
+        return ""
+    }
+
+    proc runQuery { query } {
+        global henv hdbc hstmt
+
+        set rc [odbc SQLAllocStmt $hdbc hstmt]
+        if {[string equal $rc SQL_ERROR]} {
+            echo "Unable to allocate statement."
+            return "SQL_ERROR Unable to allocate statement in runQuery"
+        }
+
+        # Exec the SQL
+        set rc [odbc SQLExecDirect $hstmt $query SQL_NTS]
+        if {[string equal $rc SQL_ERROR]} {
+            set err [HVodbc::getError]
+            echo "Error on query: $err"
+            return "SQL_ERROR $err"
+        }
+
+        # Get number of results
+        set rc [odbc SQLNumResultCols $hstmt num_results]
+        if {[string equal $rc SQL_ERROR]} {
+            set err [HVodbc::getError]
+            echo "Error on NumResultCols: $err"
+            return "SQL_ERROR $err"
+        }
+
+	if {!$num_results} {
+	    odbc SQLFreeStmt $hstmt SQL_DROP
+	    return ""
+	}
+
+
+        # Bind columns for results
+        set cnt 0
+        while { $cnt < $num_results } {
+            incr cnt
+            set data($cnt) ""
+            set name ""; set namelen ""; set dataType ""; set colSize ""; set digits ""
+            set nullPtr ""
+            # get the column size instead of hardcoding
+            #odbc SQLDescribeCol $hstmt $cnt name 255 namelen dataType colSize digits nullPtr
+            odbc SQLBindCol $hstmt $cnt SQL_C_CHAR data($cnt) 500000 SQL_NTS
+            #odbc SQLBindCol $hstmt $cnt SQL_C_CHAR data($cnt) $colSize SQL_NTS
+        }
+
+        set rc ""
+	set results ""
+        set tmp ""
+        while {![string equal $rc SQL_NO_DATA_FOUND]} {
+           # Fetch the results
+           set rc [odbc SQLFetch $hstmt]
+           if {[string equal $rc SQL_ERROR]} {
+              set err [HVodbc::getError]
+              echo "Error on Fetch: $err"
+              return "SQL_ERROR $err"
+           }
+
+           if {![string equal SQL_NO_DATA_FOUND $rc]} {
+              set results ""
+              # Return the results as a list
+              foreach id [lsort -integer [array names data]] {
+                 lappend results $data($id) 
+              }
+              lappend tmp $results
+           }
+	} ;# end of while SQL_NO_DATA_FOUND
+	
+        odbc SQLFreeStmt $hstmt SQL_DROP
+
+        #return $results
+        return $tmp
+    }
+
+    proc getError { { onConnect 0 } } {
+        global henv hdbc hstmt
+        if $onConnect {
+            odbc SQLGetDiagRec SQL_HANDLE_DBC $hdbc 1 szSqlState NativeError szErrorMsg 512 pcbErrorMsg]
+        } else {
+            odbc SQLError $henv $hdbc $hstmt szSqlState pfnativeError szErrorMsg 512 pcbErrorMsg
+        }
+
+        return $szErrorMsg
+    }
+}

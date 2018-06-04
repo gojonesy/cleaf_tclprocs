@@ -1,0 +1,1014 @@
+# Package generated on: Fri Jun  6 08:55:40 CST 2014
+#
+
+#@package: netPrologue getNetVersion putNetPrologue
+
+# $Id: netPrologue.tcl,v 1.3 1998/02/20 23:59:37 neuts Exp $
+#
+# netPrologue.tcl - Functions for reading and writing NetConfig file prologues
+#
+# Copyright (c) 1993, Healthcare Communication, Inc.  All rights reserved.
+#
+# Exported Procedures:
+#	getNetVersion	- read  NetConfig prologue & fetch format version
+#	putNetPrologue	- write NetConfig prologue
+#
+
+######################################################################
+# getNetVersion - read NetConfig prologue & fetch format version
+# Args:
+#	fileHandle		= input filehandle
+#	outVersVar		= return variable for version  (optional)
+#	outPrologueVar		= return variable for prologue (optional)
+#
+# Returns:
+#	Like keylget
+#
+# Notes:
+#	This proc is a front-end to other file prologue procs.  No matter
+#	how an error is handled (i.e., propogated or not), no attempt
+#	to restore the filehandle to its previous state will be made.
+#
+#	This proc assumes that NetConfig files have a TYPE value of 'net'
+#	and that VERSION is the key for the the file format version.
+#
+# PACKAGE-EXPORT: getNetVersion
+#
+proc getNetVersion { fileHandle { outVersVar {} } { outPrologueVar {} }} {
+    if [catch { readPrologue proList $fileHandle } msg ] {
+	if { $outVersVar == "" } {
+	    # If no variable given, propogate the error
+
+	    global errorInfo errorCode
+	    error $msg $errorInfo $errorCode
+	} else {
+	    return 0
+	}
+    }
+
+    if { ![keylget proList TYPE typeVal] || $typeVal != "net" } {
+	# We couldn't fetch the TYPE value or it wasn't 'net.'
+
+	if { $outVersVar == "" } {
+	    # No variable name was given: error out.
+	    error "file is not of type 'net'"
+	} else {
+	    # Fail gracefully.
+	    return 0
+	}
+    }
+
+    if ![lempty $outPrologueVar] {
+	upvar $outPrologueVar outPrologue
+	set outPrologue $proList
+    }
+
+    if { $outVersVar == "" } {
+	# No variable name was given, so we simply return the keylget
+	# result.  It it errors out, so it goes.
+
+	return [keylget proList VERSION]
+    } else {
+	# Attach to the caller's variable.  If the keylget fails, we'll
+	# just return 0.
+
+	upvar $outVersVar outVers
+	return [keylget proList VERSION outVers]
+    }
+}
+
+######################################################################
+# putNetPrologue - write NetConfig prologue
+# Args:
+#	fileHandle		= output filehandle
+#	versionVal		= VERSION value
+#	outPrologueVar		= prologue list variable (optional)
+#
+# Notes:
+#	This proc assumes that NetConfig files have a TYPE value of 'net'
+#	and that VERSION is the key for the the file format version.
+#
+# PACKAGE-EXPORT: putNetPrologue
+#
+proc putNetPrologue { fileHandle versionVal { outPrologueVar {} }} {
+    makeBasicPrologueList proList				;# start small
+    keylset proList TYPE     net				;# add type
+    keylset proList VERSION $versionVal				;# add version
+
+    writePrologue proList $fileHandle				;# write it
+
+    if ![lempty $outPrologueVar] {
+	upvar $outPrologueVar outPrologue
+	set outPrologue $proList
+    }
+}
+
+#@packend
+
+
+#@package: nci netconfig netcfgLoad netcfgModified netcfgGetVersion netcfgGetConnList netcfgGetDestList netcfgGetConnCount runtimeGetConnCount netcfgGetGroupList netcfgGetGroupCount netcfgGetProcList netcfgGetProcCount netcfgGetConnData netcfgGetProcData netcfgGetDestData netcfgGetProcConns netcfgIsConnInProcess netcfgGetGroupConns netcfgIsConnInGroup netcfgGetConnCacheMsgFlag netcfgReloadLock netcfgLoadCheck runtimeRootConnCount
+
+# $Id: nci.tcl,v 1.27 2014/01/24 08:03:00 lxu Exp $
+#
+# nci.tcl - Procs for reading NetConfig data
+#
+###############################################################
+#                                                             #
+#                           NOTICE                            #
+#                                                             #
+#   THIS SOFTWARE IS THE PROPERTY OF AND CONTAINS             #
+#   CONFIDENTIAL INFORMATION OF INFOR AND/OR ITS AFFILIATES   #
+#   OR SUBSIDIARIES AND SHALL NOT BE DISCLOSED WITHOUT PRIOR  #
+#   WRITTEN PERMISSION. LICENSED CUSTOMERS MAY COPY AND       #
+#   ADAPT THIS SOFTWARE FOR THEIR OWN USE IN ACCORDANCE WITH  #
+#   THE TERMS OF THEIR SOFTWARE LICENSE AGREEMENT.            #
+#   ALL OTHER RIGHTS RESERVED.                                #
+#                                                             #
+#   (c) COPYRIGHT 2014 INFOR.  ALL RIGHTS RESERVED.           #
+#   THE WORD AND DESIGN MARKS SET FORTH HEREIN ARE            #
+#   TRADEMARKS AND/OR REGISTERED TRADEMARKS OF INFOR          #
+#   AND/OR ITS AFFILIATES AND SUBSIDIARIES. ALL RIGHTS        #
+#   RESERVED.  ALL OTHER TRADEMARKS LISTED HEREIN ARE         #
+#   THE PROPERTY OF THEIR RESPECTIVE OWNERS.                  #
+#                                                             #
+###############################################################
+#
+# Exported Procedures:
+#       netconfig               - front end to all the other funtions
+#	netcfgLoad		- Load the netconfig
+#	netcfgLoadCheck	        - Load and Check the netconfig
+#	netcfgModified		- Has NetConfig been modified
+#	netcfgGetVersion	- Get the file format version
+#	netcfgGetConnList	- Get the list of connections
+#	netcfgGetConnCount	- Get count of connections
+#	runtimeGetConnCount	- Get count of runtime connections per site
+#	runtimeRootConnCount	- Get count of runtime connections per root
+#	netcfgGetGroupList	- Get the list of groups
+#	netcfgGetGroupCount	- Get count of groups
+#	netcfgGetProcList	- Get the list of processes
+#	netcfgGetProcCount	- Get count of processes
+#	netcfgGetConnData	- Get data for a connection
+#	netcfgGetProcData	- Get data for a process
+#	netcfgGetProcConns	- Get the connections within a process
+#	netcfgGetGroupConns	- Get the connections within a group
+#	netcfgIsConnInProcess	- See if a connection is in a process
+#	netcfgIsConnInGroup	- See if a connection is in a group
+#   netcfgGetDestData   - Get destination configuration for external(inter-site) routing 
+#
+
+######################################################################
+# netconfig - front end to the netconfig processing routines (one 
+#             man page instead of 14!)
+#
+#    usage:  netconfig action args
+#
+#    action args:                       maps to:
+#    ---------------------------------- -----------------------
+#    get connection count               netcfgGetConnCount
+#    get connection data <connection>   netcfgGetConnData
+#    get connection list                netcfgGetConnList
+#    get group connections <group>      netcfgGetGroupConns
+#    get group count                    netcfgGetGroupCount
+#    get group list                     netcfgGetGroupList
+#    get process connections <process>  netcfgGetProcConns
+#    get process count                  netcfgGetProcCount
+#    get process data <process>         netcfgGetProcData
+#    get process list                   netcfgGetProcList
+#    get destination data <dest>        netcfgGetDestData
+#    get destination list               netcfgGetDestList
+#    get version                        netcfgGetVersion
+#    ingroup <group> <connection>       netcfgIsConnInGroup
+#    inprocess <process> <connection>   netcfgIsConnInProcess
+#    load ?file?                        netcfgLoad
+#    modified                           netcfgModified
+#
+# PACKAGE-EXPORT: netconfig
+proc netconfig {action args} {
+    global _ncfg_file
+
+    set usage {
+usage:  netconfig action args
+
+action args:                       
+---------------------------------- 
+get connection count
+get connection data <connection>
+get connection list
+get group connections <group>
+get group count
+get group list
+get process connections <process>
+get process count
+get process data <process>
+get process list
+get destination data <dest>
+get destination list
+get version
+ingroup <group> <connection>
+inprocess <process> <connection>
+load ?file?
+modified}
+
+    if {$action != "load" && $_ncfg_file == ""} {
+	# auto-load the default netconfig file...
+	netcfgLoad
+    }
+
+    switch $action {
+	ingroup 		{eval netcfgIsConnInGroup $args}
+	inprocess 		{eval netcfgIsConnInProcess $args}
+	load 	 		{eval netcfgLoad $args}
+	modified 		{eval netcfgModified $args}
+	get      {
+	    set originalArgs $args
+	    set which [lvarpop args]
+	    set type [lvarpop args]
+
+	    switch $which {
+		connection	{set which "Conn"}
+		group		{set which "Group"}
+		process		{set which "Proc"}
+		destination	{set which "Dest"}
+		version		{set which "Version"}
+	    }
+
+	    switch $type {
+		list		{set type "List"}
+		count   	{set type "Count"}
+		data    	{set type "Data"}
+		connections	{set type "Conns"}
+	    }
+		
+	    set cmd netcfgGet${which}${type}
+	    dputs "command: $cmd"
+
+	    if {![cequal [info commands $cmd] ""]} {
+		eval  $cmd $args
+	    } else {
+		error "illegal netconfig command $originalArgs$usage"
+	    }
+	}
+
+	default {
+	    error "unknown netconfig command $action$usage"
+	}
+    }
+    
+}
+
+######################################################################
+# netcfgLoad - Load the netconfig
+# Args:
+#	config	= name of config file to load, defaults to NetConfig in
+#		  the current site.
+#
+# PACKAGE-EXPORT: netcfgLoad
+#
+proc netcfgLoad { {config "" } } {
+    global _ncfg_file _ncfg_time HciSiteDir
+
+    if [lempty $config] {		;# Get default file
+	set config [file join $HciSiteDir NetConfig]
+    } else {
+	set config [file join $HciSiteDir $config]
+    }
+    if { $config != $_ncfg_file } {	;# New file
+	set _ncfg_time 0		;# Force reload
+    }
+	
+    set _ncfg_file $config		;# Remember file name
+
+    NCFG:checkReload			;# Reload if necessary
+}
+
+######################################################################
+# netcfgModified		- Has NetConfig been modified
+#
+# PACKAGE-EXPORT: netcfgModified
+#
+proc netcfgModified {} {
+    return [NCFG:checkReload -test]
+}
+
+######################################################################
+# netcfgGetVersion - Get the file format version
+#
+# PACKAGE-EXPORT: netcfgGetVersion
+#
+proc netcfgGetVersion {} {
+    global _ncfg_Version
+
+    NCFG:checkReload			;# Reload if necessary
+    return $_ncfg_Version
+}
+
+######################################################################
+# netcfgGetConnList - Get the list of connections
+#
+# PACKAGE-EXPORT: netcfgGetConnList
+#
+proc netcfgGetConnList {} {
+    global _ncfg_ConnData _ncfg_DestinationData
+
+    NCFG:checkReload			;# Reload if necessary
+    set ConnList [array names _ncfg_ConnData]
+    append ConnList " " [array names _ncfg_DestinationData]
+    
+    return $ConnList
+    #return [array names _ncfg_ConnData]	;# Array indices are conn names
+}
+
+######################################################################
+# netcfgGetDestList - Get the list of destinations
+#
+# PACKAGE-EXPORT: netcfgGetDestList
+#
+proc netcfgGetDestList {} {
+    global _ncfg_DestinationData
+
+    NCFG:checkReload			;# Reload if necessary
+    set ConnList [array names _ncfg_DestinationData]
+        
+    return $ConnList
+    
+}
+
+######################################################################
+# netcfgGetConnCount - Get the number of connections
+# Args:		type	= {}, external, or vendor
+# Returns:	connection count
+#
+# PACKAGE-EXPORT: netcfgGetConnCount
+#
+proc netcfgGetConnCount {{ type {} }} {
+    global _ncfg_ConnData _ncfg_TypeCounts _ncfg_DestinationData
+
+    NCFG:checkReload			;# Reload if necessary
+
+    switch -- $type {
+	{} {
+	    # Return length of list
+        set connCount [llength [array names _ncfg_ConnData]]
+        set destCount [llength [array names _ncfg_DestinationData]]
+        set count [expr $connCount + $destCount]
+        return $count
+	    #return [ llength [array names _ncfg_ConnData]]
+	}
+
+	external -
+	vendor {
+	    return $_ncfg_TypeCounts($type)
+	}
+
+	default {
+	    error "bogus type '$type' -- should be {}, external, or vendor"
+	}
+    }
+}
+
+
+######################################################################
+# runtimeGetConnCount - Get the number of connections
+# Args:		type	= {}, external, or vendor
+# Returns:	connection count
+#
+# PACKAGE-EXPORT: runtimeGetConnCount
+#
+
+proc runtimeGetConnCount {} {
+    if { [catch {set output [exec hcimsiutil -dc]} msg] } {
+		puts stderr "hcimsiutil -dc failed, call returned: \"$msg\""
+		return "-1"
+    	}
+    return $output
+}
+######################################################################
+
+# netcfgGetGroupList - Get the list of groups
+#
+# PACKAGE-EXPORT: netcfgGetGroupList
+#
+proc netcfgGetGroupList {} {
+    global _ncfg_GroupConns
+
+    NCFG:checkReload			;# Reload if necessary
+    return [array names _ncfg_GroupConns] ;# Array indices are group names
+}
+
+######################################################################
+# netcfgGetGroupCount - Get the number of groups
+#
+# PACKAGE-EXPORT: netcfgGetGroupCount
+#
+proc netcfgGetGroupCount {} {
+    global _ncfg_GroupConns
+
+    NCFG:checkReload			;# Reload if necessary
+    return [llength [array names _ncfg_GroupConns]] ;# Return length of list
+}
+
+######################################################################
+# netcfgGetProcList - Get the list of processes
+#
+# PACKAGE-EXPORT: netcfgGetProcList
+#
+proc netcfgGetProcList {} {
+    global _ncfg_ProcessData
+
+    NCFG:checkReload			;# Reload if necessary
+    return [array names _ncfg_ProcessData] ;# Array indices are conn names
+}
+
+######################################################################
+# netcfgGetProcCount - Get the number of processes
+#
+# PACKAGE-EXPORT: netcfgGetProcCount
+#
+proc netcfgGetProcCount {} {
+    global _ncfg_ProcessData
+
+    NCFG:checkReload			;# Reload if necessary
+    return [llength [array names _ncfg_ProcessData]] ;# Return length of list
+}
+
+######################################################################
+# netcfgGetConnData - Get data for a connection
+# Args:
+#	conn	= name of connection for which to get data
+#	key	= specific config element key (optional)
+# Returns:
+#	The keyed list of connection data from the NetConfig file.  If the
+#	desired connection or config key is not found, an empty list is
+#	returned.
+#
+# PACKAGE-EXPORT: netcfgGetConnData
+#
+proc netcfgGetConnData { conn {key "" } } {
+    global _ncfg_ConnData
+
+    NCFG:checkReload			;# Reload if necessary
+
+    if [catch { set data $_ncfg_ConnData($conn) }] {
+	return {}
+    }
+
+    if [lempty $key] {
+	return $data
+    } else {
+	if ![keylget data $key retVal] {
+	    set retVal {}
+	}
+
+	return $retVal
+    }
+}
+
+######################################################################
+# netcfgGetProcData - Get data for a process
+# Args:
+#	proc	= name of process for which to get data
+#	key	= specific config element key (optional)
+# Returns:
+#	The keyed list of process data from the NetConfig file.  If the
+#	desired process is not found, an empty list is returned.
+#
+# PACKAGE-EXPORT: netcfgGetProcData
+#
+proc netcfgGetProcData { proc {key "" } } {
+    global _ncfg_ProcessData
+
+    NCFG:checkReload			;# Reload if necessary
+
+    if [catch { set data $_ncfg_ProcessData($proc) }] {
+	return {}
+    }
+
+    if [lempty $key] {
+	return $data
+    } else {
+	if ![keylget data $key retVal] {
+	    set retVal {}
+	}
+
+	return $retVal
+    }
+}
+
+######################################################################
+# netcfgGetDestData - Get data for a destination
+# Args:
+#	proc	= name of destination for which to get data
+#	key	= specific config element key (optional)
+# Returns:
+#	The keyed list of destination data from the NetConfig file.  If the
+#	desired destination is not found, an empty list is returned.
+#
+# PACKAGE-EXPORT: netcfgGetDestData
+#
+proc netcfgGetDestData { dest {key "" } } {
+    global _ncfg_DestinationData
+
+    NCFG:checkReload			;# Reload if necessary
+
+    if [catch { set data $_ncfg_DestinationData($dest) }] {
+        return {}
+    }
+
+    if [lempty $key] {
+        return $data
+    } else {
+        if ![keylget data $key retVal] {
+            set retVal {}
+        }
+        return $retVal
+    }
+}
+
+
+######################################################################
+# netcfgGetProcConns - Get the connections within a process
+# Args:
+#	proc	= name of process for which to get data
+# Returns:
+#	A list of the connections within the requested process.  If the
+#	process isnt defined, then an empty list is returned.
+#	
+# PACKAGE-EXPORT: netcfgGetProcConns
+#
+proc netcfgGetProcConns { proc } {
+    global _ncfg_ProcessConns
+
+    NCFG:checkReload			;# Reload if necessary
+
+    set data ""
+    catch { set data $_ncfg_ProcessConns($proc) }
+
+    return $data
+}
+
+######################################################################
+# netcfgIsConnInProcess - See if a connection is within a process
+# Args:
+#	conn	= connection name
+#	proc	= name of process to check
+# Returns:
+#	boolean, TRUE == connection is within process
+#	
+# PACKAGE-EXPORT: netcfgIsConnInProcess
+#
+proc netcfgIsConnInProcess { proc conn } {
+    return [expr [lsearch -exact [netcfgGetProcConns $proc] $conn] >= 0]
+}
+
+######################################################################
+# netcfgGetGroupConns - Get the connections within a group
+# Args:
+#	group	= name of group for which to get data
+# Returns:
+#	A list of the connections within the requested group.  If the
+#	group isnt defined, then an empty list is returned.
+#	
+# PACKAGE-EXPORT: netcfgGetGroupConns
+#
+proc netcfgGetGroupConns { group } {
+    global _ncfg_GroupConns
+
+    NCFG:checkReload			;# Reload if necessary
+
+    set data ""
+    catch { set data $_ncfg_GroupConns($group) }
+
+    return $data
+}
+
+######################################################################
+# netcfgIsConnInGroup - See if a connection is within a group
+# Args:
+#	conn	= connection name
+#	group	= name of group to check
+# Returns:
+#	boolean, TRUE == connection is within group
+#	
+# PACKAGE-EXPORT: netcfgIsConnInGroup
+#
+proc netcfgIsConnInGroup { group conn } {
+    return [expr [lsearch -exact [netcfgGetGroupConns $group] $conn] >= 0]
+}
+
+######################################################################
+# netcfgGetConnCacheMsgFlag - See if a connection is enabled cache message flag
+# Args:
+#	conn	= connection name
+# Returns:
+#	boolean, TRUE == connection is within cache message
+#	
+# PACKAGE-EXPORT: netcfgGetConnCacheMsgFlag
+#
+proc netcfgGetConnCacheMsgFlag { conn } {
+    global _ncfg_cacheMsgConns
+
+    # intersite destination thread has the format "threadname*xxx" at runtime
+    # need to retreive the thread name to do the check
+    set NCI_XLATE_RD_DEST_SEPARATOR "*"
+    set index [string first $NCI_XLATE_RD_DEST_SEPARATOR $conn]
+    if {$index > 0} {
+        set $conn [string range $conn 0 $index-1]
+    }
+
+    return [expr [lsearch -exact $_ncfg_cacheMsgConns $conn] >= 0]
+}
+
+######################################################################
+# netcfgReloadLock - Set global to that stops reloads
+# Args:
+#	val	= new value, 1 stops reloads, 0 allows
+# Returns:
+#	int, old value of the flag
+#	
+# PACKAGE-EXPORT: netcfgReloadLock
+#
+proc netcfgReloadLock { val } {
+    global _ncfg_once
+    set oldVal $_ncfg_once
+    set _ncfg_once $val
+    return $oldVal
+}
+
+######################################################################
+# NCFG:checkReload - Reload the netConfig data if necessary
+# Args:
+#	test	= just test for reload needed, defaults to null
+#
+proc NCFG:checkReload { {test ""} } {
+    global _ncfg_time _ncfg_file _ncfg_once
+
+#   Check to see if engine is stopping reloads, allow first
+    if {$_ncfg_once && [expr $_ncfg_time != 0]} {
+        return 0
+    }
+
+    if { [catch {set mtime [file mtime $_ncfg_file]} msg] } {
+	error $msg
+    }
+
+    set needed [expr $mtime > $_ncfg_time]
+
+    if { $needed && [lempty $test] } {	;# Reload data
+	NCFG:reload $_ncfg_file
+	set _ncfg_time $mtime
+    }
+
+    return $needed			;# Tell caller what happened
+}
+
+######################################################################
+# NCFG:reload - reload the netConfig data
+# Args:
+#	config	= config file to load
+#
+proc NCFG:reload { config } {
+    global _ncfg_ConnData _ncfg_ProcessData _ncfg_ProcessConns _ncfg_Version
+    global _ncfg_GroupConns _ncfg_TypeCounts
+    global _ncfg_DestinationData _ncfg_cacheMsgConns
+
+    # Remove, initialize the array
+    catch { unset _ncfg_ConnData _ncfg_ProcessData _ncfg_ProcessConns _ncfg_DestinationData }
+    set   _ncfg_ConnData(bogusKey) {}
+    unset _ncfg_ConnData(bogusKey)
+    set   _ncfg_ProcessData(bogusKey) {}
+    unset _ncfg_ProcessData(bogusKey)
+    set   _ncfg_ProcessConns(bogusKey) {}
+    unset _ncfg_ProcessConns(bogusKey)
+    set   _ncfg_GroupConns(bogusKey) {}
+    unset _ncfg_GroupConns(bogusKey)
+	set   _ncfg_DestinationData(bogusKey) {}
+    unset _ncfg_DestinationData(bogusKey)
+
+    set _ncfg_TypeCounts(external) 0
+    set _ncfg_TypeCounts(vendor) 0
+    set _ncfg_cacheMsgConns ""
+
+    if { [catch {set ncf [open $config r]} msg] } {
+	error $msg
+    }
+# EuroBinary not used in MB version but left as history comment
+#if {[uplevel #0 {info exists EuroBinary}]} {
+#    fconfigure $ncf -encoding binary -eofchar {}
+#}
+    # Check for BOM on netconfig and force UTF-8 encoding
+    fconfigure $ncf -encoding utf-8
+    set bom "\ufeff"
+    set tbom [read $ncf 1]
+    if ([string equal $tbom $bom]) {
+        #puts "Begins with utf-8 BOM."
+    } else {
+        #puts "Did not find the BOM."
+        seek $ncf 0
+    }
+
+    set minvers 3.0
+    set maxvers 3.10
+
+    if [getNetVersion $ncf _ncfg_Version] {
+	# Check the lower and upper bounds of compatible versions
+	if { $_ncfg_Version < $minvers || $_ncfg_Version > $maxvers } {
+	    set    errMsg "$config is version $_ncfg_Version; "
+	    append errMsg "versions $minvers through $maxvers are supported."
+
+	    error $errMsg
+	}
+    } else {
+	error "Unable to fetch version from $config."
+    }
+
+    # Now process the data in the file
+
+    while { [lgets $ncf line] >= 0 } {
+	if { [lempty $line] } continue
+
+	lassign $line type name config
+
+	switch -exact -- $type {
+	    protocol {
+		if { [info exists _ncfg_ConnData($name)] } {
+		    close $ncf
+		    error "Duplicate NetConfig host entry: $name"
+		}
+
+		set _ncfg_ConnData($name) $config ;# Store conn data
+
+		# Prepare the process to name mapping
+
+		if { [keylget config PROCESSNAME procName] == 0 } {
+		    close $ncf
+		    error "PROCESSNAME missing for entry: $name"
+		}
+		lappend _ncfg_ProcessConns($procName) $name
+
+		# Fetch the thread's CloverleafGateway type and
+		# update the count.  If the thread is untyped, assume
+		# vendor (vendor threads are more likely to be
+		# license limited than external threads).
+		# N.B.: this is _different_ than
+		# engine/protocols/ProtocolThreadData.c
+		# PR-2839: use $gwtype to not clobber $type
+		if { [keylget config GATEWAYTHREADTYPE gwtype] == 0 } {
+		    set gwtype vendor
+		}
+		if { [string compare $gwtype external]
+		  && [string compare $gwtype vendor] } {
+		    close $ncf
+		    error "$name: bogus GATEWAYTHREADTYPE '$gwtype'"
+		}
+		incr _ncfg_TypeCounts($gwtype)
+
+
+		# Add a protocol connection to all its groups
+
+		if [cequal $type protocol] {
+		    if { [keylget config GROUPS groups] == 0 } {
+			close $ncf
+			error "GROUPS missing for entry: $name"
+		    }
+
+		    foreach grp $groups {
+			lappend _ncfg_GroupConns($grp) $name
+		    }
+		}
+	    }
+
+	    process {
+		if { [info exists _ncfg_ProcessData($name)] } {
+		    close $ncf
+		    error "Duplicate NetConfig process entry: $name"
+		}
+
+		set _ncfg_ProcessData($name) $config ;# Store process data
+	    }
+
+        destination {
+            if { [info exists _ncfg_DestinationData($name)] } {
+                close $ncf
+                error "Duplicate NetConfig destination entry: $name"
+            }
+            set _ncfg_DestinationData($name) $config ;    
+        }
+        
+	    default {
+		# Just ignore everything else
+	    }
+	}
+    }
+
+    # Check if the connections use cacheMsg
+    # For the destination thread, it will be added in the cacheMsg conn list by default
+    append _ncfg_cacheMsgConns [array names _ncfg_DestinationData]
+    foreach connName [array names _ncfg_ConnData] {
+        set protoData ""
+        keylget _ncfg_ConnData($connName) PROTOCOL protoData
+        set type ""
+        keylget protoData TYPE type
+        if {[string equal $type "database-outbound"]} {
+            set obAction ""
+            set cacheMsg 0
+            keylget protoData OB_ACTION obAction
+            keylget obAction USECACHEMSG cacheMsg
+            if {$cacheMsg == 1} {
+                # cache message flag enabled in this connection
+                lappend _ncfg_cacheMsgConns $connName
+            }
+        } 
+    }
+    
+    close $ncf
+}
+
+######################################################################
+# netcfgLoadCheck - Load and Check the netconfig
+# Args:
+#	config	= name of config file to load, defaults to NetConfig in
+#		  the current site.
+#
+# PACKAGE-EXPORT: netcfgLoadCheck
+#
+proc netcfgLoadCheck { {config ""} } {
+    global _ncfg_ProcessData _ncfg_ConnData 
+
+    netcfgLoad $config
+
+    # If a given key does not exist, it is created w/ the given
+    # default value by updating a process's configuration list 
+    set processList	[array names _ncfg_ProcessData]
+    foreach processName	$processList {
+	set processConfig $_ncfg_ProcessData($processName)		
+	if {[catch {updateProcessList processConfig newData} msg]} {
+	    puts stderr "\nNetConfig Data conversion failed: $msg\n"
+    	}
+	set newProcessArray($processName) $newData
+    }
+    
+    # check the processes for errors
+    set verifyWarnList ""
+    if {[catch {checkProcessArray verifyWarnList newProcessArray} msg]} {
+	puts stderr "\nNetConfig Error: $msg\n"
+    }
+    
+    # If a given key does not exist, it is created w/ the given
+    # default value by updating a protoThread's configuration list 
+    set protoThreadList	[array names _ncfg_ConnData]
+    foreach protoThreadName	$protoThreadList {
+	set protoThreadConfig $_ncfg_ConnData($protoThreadName)		
+	if {[catch {updateProtoThreadList protoThreadConfig newData} msg]} {
+	    puts stderr "\nNetConfig Data conversion failed: $msg\n"
+    	}
+	set newprotoThreadArray($protoThreadName) $newData
+    }
+    
+    # check the threads for errors
+    if {[catch {checkHostArray verifyWarnList newprotoThreadArray} msg]} {
+	puts stderr "\nNetConfig Error: $msg\n"
+    }
+
+    set returnString ""
+    foreach i $verifyWarnList {
+    	set returnString "$returnString\n$i"
+    }
+    return $returnString
+}
+
+######################################################################
+# runtimeRootConnCount - get the count of alive thread under a root
+#			loop through server.ini to get total running cnt.
+# Args:
+# PACKAGE-EXPORT: runtimeRootConnCount
+#
+proc runtimeRootConnCount {} {
+	global HciRootDir HciSite
+	set total 0
+	set found 0
+	set workingSite $HciSite
+	set iniName [file join $HciRootDir server server.ini]
+	if {[file exists $iniName] != 1} {
+		puts "File $iniName not found"
+		return -1
+	}
+	if [catch {set fp [open $iniName]}] {
+		puts "Unable to open file $iniName"
+		set total -1
+	}
+	if {$total < 0} {
+		return -1
+	}
+	while {[gets $fp line] >=0} {
+		if { [string first environs= $line] <= -1} {
+			continue;
+		}
+		set found 1
+		set nline [string range $line 9 end]
+		set siteListPath [split $nline ";"]
+		break
+	}
+	close $fp
+	if {$found != 1} {
+		return -1
+	}
+	foreach site $siteListPath {
+		set siteName [file tail $site]
+		NCFG:ChangeSite $siteName	       
+		set scnt [runtimeGetConnCount]
+		if {[string equal $scnt "-1"]} {
+                   return $scnt
+                }
+		if [catch {set total [expr $scnt + $total ]}] {
+			puts "Site count error: $scnt"
+			return -1
+		}
+	}	
+	NCFG:ChangeSite $workingSite
+	return $total
+}
+###############################################################
+# Change Site
+proc NCFG:ChangeSite { {site {}} } {
+    global env HciProcessesDir HciSiteDir HciSite 
+
+    if {[string length $site] && [string compare $site $HciSite]} {
+        set failed 0
+        # Unfortunately "tcl" language option in hubtools hcisetenv doesn't
+        # work properly with values that end in \
+        # So revert to regsub'ing the tools hcisetenv.
+#    	set setStatements [split [PortableExec hcisetenv -site $site] \n]
+#       On windows extensions matter so must specify files with full path
+#       or they are not found. (ver 5.6)
+        set hciset [file join $env(HCIROOT) bin hcisetenv]
+        set hciperl [file join $env(HCIROOT) bin perl]
+    	if { [catch {set setStatements [split [exec $hciperl $hciset  -site $site] \n] } msg] } {
+           set failed 1
+        }
+        if {$failed} {
+           set hciset [file join $env(HCIROOT) bin hcisetenv.pl]
+           set setStatements [split [exec $hciperl $hciset  -site $site] \n]
+        }
+    	foreach setStatement $setStatements {
+    		if {![regexp {^set +([^ ]+) +([^ ].*)} $setStatement \
+    		        wholeThing varName varValue]} {
+    			continue
+    		}
+    		regsub -all ' $varValue {} varValue
+    		set env($varName) $varValue
+    	}
+
+        set HciSite         $env(HCISITE)
+        set HciSiteDir      [file join $env(HCISITEDIR)]
+        set HciProcessesDir [file join  $HciSiteDir exec processes]
+   }
+}
+###############################################################
+# siteNames
+# This proc get a site name list from server.ini
+
+
+proc NCFG:siteNames { iniFile } {
+    set siteList {}
+   set qualifier {}
+    for_file fileLine $iniFile {
+#		puts "starting [string first environs= $fileLine]\n"
+	if { [string first environs= $fileLine]!=-1} {
+#		puts $fileLine
+#		puts "starting [string first = $fileLine]\n"
+		set nline [string range $fileLine 9 end]
+#		puts "\nline=$nline"
+		set siteList [split $nline ";"]
+			set nameList {}
+			foreach sname $siteList {
+				
+#				puts "\nsname=$sname"
+#				puts "\laststring=[string last "\\" $sname ]"
+				set stIdx [string last "\\" $sname ]
+				
+				set names [string range $sname [expr $stIdx + 1] end]
+#				puts "names=$names"
+				lappend nameList $names
+#				puts "\nnamelist=$nameList"
+				#set nnames $names";"
+				#puts "nnames=$nnames"
+			}
+		break
+	}
+	
+    }
+    return $nameList
+}
+
+
+######################################################################
+######################################################################
+# One time only init code
+
+set _ncfg_time 0
+set _ncfg_file ""
+set _ncfg_once 0
+
+
+#@packend
+

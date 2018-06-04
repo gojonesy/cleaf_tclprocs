@@ -1,0 +1,2308 @@
+
+    { AUTOSTART 1 }
+    { BITMAP logo-cerner.gif }
+    { COORDS {0 0} }
+    { DATAFORMAT {
+        { TYPE hl7 }
+    } }
+    { DATAXLATE {
+        {
+            { CACHEMSG 0 }
+            { DEL_ON_ERR_ROUTE 0 }
+            { ROUTE_DETAILS {
+                {
+                    { DEST CARD_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST CODE_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST DICT_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST EXT_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST FIN_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST FINB_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST LAB_send }
+                    { PROCS {
+                        { ARGS {{}} }
+                        { PROCS filter_no_mrn_num }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST SC_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST CLIN_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST PACS_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST PHYS_send }
+                    { DETAILS_ENABLED 0 }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST PTMGT_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST RAD_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST REHAB_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST SUPL_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST TELE_send }
+                    { DETAILS_ENABLED 0 }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST TW_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } 
+            } }
+            { ROUTE_ENABLED 1 }
+            { TRXID _HCI_static_route_ }
+            { WILDCARD OFF }
+        } 
+    } }
+    { EDIBATCH {
+        { IN_DATA {
+            { TYPE {} }
+            { VERSION {} }
+        } }
+        { OUT_DATA {
+            { HEADER {} }
+            { TRIGGER {
+                { COUNT {} }
+                { SCHEDULER {} }
+                { TIMER {} }
+            } }
+            { TYPE {} }
+            { VERSION {} }
+        } }
+    } }
+    { ENCODING ASCII }
+    { ENCODING_BOM_IB 0 }
+    { ENCODING_BOM_OB 0 }
+    { ENCODING_XML 0 }
+    { EOCONFIG {} }
+    { GROUPS {Cerner REG} }
+    { HOSTDOWN 0 }
+    { ICLSERVERPORT {} }
+    { KEEPMSGONDISK 0 }
+    { META {} }
+    { OBWORKASIB 0 }
+    { OUTBOUNDONLY 0 }
+    { PROCESSNAME REGB }
+    { PROTOCOL {
+        { CA_FILE {} }
+        { CA_PATH {} }
+        { CERT_FILE {} }
+        { CLOSE 0 }
+        { CONTROLMSGS 0 }
+        { COPYCLIENTIPP 0 }
+        { DELAYCONNECT 0 }
+        { HOST {} }
+        { IPV4_V6_DUAL 0 }
+        { IS_SSL 0 }
+        { ISMULTI 0 }
+        { ISSERVER 1 }
+        { LOCAL_IP {} }
+        { MAXCLIENT 0 }
+        { MAXOBQD 0 }
+        { MAXPREXLTQD 0 }
+        { MODE {} }
+        { PASSWORD {} }
+        { PDLNAME mlp_tcp.pdl }
+        { PDLTYPE tcp-server }
+        { PORT 9109 }
+        { PRIVATE_KEY {} }
+        { RECONNECT 1 }
+        { REOPEN 5 }
+        { SSL_PROTOCOL All }
+        { TYPE pdl-tcpip }
+    } }
+    { RECVCONTROL {
+        { ACKCONTROL {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { EOMSG {} }
+        { HOLDMSGS 0 }
+        { MSGPRIO 5120 }
+    } }
+    { REPLYCONTROL {
+        { OBRESEND 1 }
+        { REPLYGEN {
+            { TYPE none }
+        } }
+        { TIMEOUT 45 }
+        { WAIT 0 }
+    } }
+    { REPLYFORMAT {
+        { FRLTYPE offlen }
+        { OFFLEN {
+            { LEN 0 }
+            { OFF 0 }
+        } }
+        { TYPE frl }
+    } }
+    { REPLYXLATE {
+ 
+    } }
+    { SAVEMSGS {
+        { INARCHIVE {} }
+        { INARCHIVEPROC {} }
+        { INARCHIVETHRESHOLD 15 }
+        { INARCHIVETIMEOUT 600 }
+        { INFILE EMR_IA_REGB }
+        { INSAVE 1 }
+        { OUTARCHIVE {} }
+        { OUTARCHIVEPROC {} }
+        { OUTARCHIVETHRESHOLD 15 }
+        { OUTARCHIVETIMEOUT 600 }
+        { OUTFILE EMR_IA_REG }
+        { OUTSAVE 0 }
+        { SAVEINARCHIVE 0 }
+        { SAVEOUTARCHIVE 0 }
+        { SAVETRACING 0 }
+    } }
+    { SCHEDULE {} }
+    { SENDDATACTRL {
+        { FAILPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FORWARDTHREAD {} }
+        { HOLDMSGS 0 }
+        { INTERVAL 10 }
+        { OKPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { PREWRITEPROCS {{ARGS {}} {PROCS {}} {PROCSCONTROL {}}} }
+        { RETRIES -1 }
+    } }
+    { SENDREPLYCTRL {
+        { FAILPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FORWARDTHREAD {} }
+        { HOLDMSGS 0 }
+        { INTERVAL 10 }
+        { OKPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { PREWRITEPROCS {{ARGS {}} {PROCS {}} {PROCSCONTROL {}}} }
+        { RETRIES -1 }
+    } }
+    { SMS {
+        { FWD_DATA {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FWD_REPLY {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { IN_DATA {
+            { ARGS {{}} }
+            { PROCS hl7Raw_ack }
+            { PROCSCONTROL ENABLED }
+            { THREADED 0 }
+        } }
+        { IN_REPLY {
+            { ARGS {{}} }
+            { PROCS hcitpsmsgkill }
+            { PROCSCONTROL ENABLED }
+        } }
+        { OUT_DATA {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+            { THREADED 0 }
+        } }
+        { OUT_REPLY {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+    } }
+    { STARTPROCS {
+        { ARGS {} }
+        { PROCS {} }
+        { PROCSCONTROL {} }
+    } }
+    { STOPPROCS {
+        { ARGS {} }
+        { PROCS {} }
+        { PROCSCONTROL {} }
+    } }
+    { SYMNAME EMR_IA_REGB }
+    { USERECOVERDB 1 }
+
+
+    { AUTOSTART 0 }
+    { BITMAP logo-cerner.gif }
+    { COORDS {0 0} }
+    { DATAFORMAT {
+        { TYPE hl7 }
+    } }
+    { DATAXLATE {
+        {
+            { CACHEMSG 0 }
+            { DEL_ON_ERR_ROUTE 0 }
+            { ROUTE_DETAILS {
+                {
+                    { DEST CAC_OD_MDOC }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST CIHOC_HLD }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_mdoc_to_cihoc_ORU.xlt }
+                } {
+                    { DEST CIHOC_OAD_EXT }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_mdoc_to_cihoc_P01.xlt }
+                } {
+                    { DEST DBMOT_OD_EXT }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {{} {}} }
+                        { PROCS {filter_by_PSY2 first_and_last_obx_powernote2} }
+                        { PROCSCONTROL {ENABLED ENABLED} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_to_dbMotion_ORU2.xlt }
+                } {
+                    { DEST DOC_OD_SC }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_ORU_to_SIU_ORU2_new_CC2_A_fix2.xlt }
+                } {
+                    { DEST LLHIE_OD_MDOC }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {{}} }
+                        { PROCS first_and_last_obx }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_to_LLHIE_ORU.xlt }
+                } {
+                    { DEST PCC_OA_EXT }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_ORU_to_PCC_ORU2_Epic_ADT.xlt }
+                } {
+                    { DEST PCC_OD_MDOC }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {{}} }
+                        { PROCS nte_to_obx_sigline }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_ORU_to_PCC_ORU2_Epic.xlt }
+                } {
+                    { DEST PTKP_OD_MDOC }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {{}} }
+                        { PROCS first_and_last_obx }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_ORU_to_patientkeeper_ORU2_A.xlt }
+                } {
+                    { DEST TW_OAS_SC }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_mdoc_to_sc_P01.xlt }
+                } {
+                    { DEST TW_OAS_SC }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_mdoc_to_sc_P01_siu.xlt }
+                } {
+                    { DEST TW_OD_SC }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_mdoc_to_sc_ORU_new5.xlt }
+                } {
+                    { DEST ARIA_ODR_RAD }
+                    { DETAILS_ENABLED 0 }
+                    { PROCS {
+                        { ARGS {{}} }
+                        { PROCS emr_mdoc_to_aria_mdm_new2 }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST THDOC_OD_MDOC }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_mdoc_to_theradoc_oru.xlt }
+                } 
+            } }
+            { ROUTE_ENABLED 1 }
+            { TRXID ORU_R01 }
+            { WILDCARD OFF }
+        } 
+    } }
+    { EDIBATCH {
+        { IN_DATA {
+            { TYPE {} }
+            { VERSION {} }
+        } }
+        { OUT_DATA {
+            { HEADER {} }
+            { TRIGGER {
+                { COUNT {} }
+                { SCHEDULER {} }
+                { TIMER {} }
+            } }
+            { TYPE {} }
+            { VERSION {} }
+        } }
+    } }
+    { ENCODING ASCII }
+    { ENCODING_BOM_IB 0 }
+    { ENCODING_BOM_OB 0 }
+    { ENCODING_XML 0 }
+    { EOCONFIG {} }
+    { GROUPS {MDOC EMR} }
+    { HOSTDOWN 0 }
+    { ICLSERVERPORT {} }
+    { KEEPMSGONDISK 0 }
+    { META {} }
+    { OBWORKASIB 0 }
+    { OUTBOUNDONLY 0 }
+    { PROCESSNAME MDOC }
+    { PROTOCOL {
+        { CA_FILE {} }
+        { CA_PATH {} }
+        { CERT_FILE {} }
+        { CLOSE 0 }
+        { CONTROLMSGS 0 }
+        { COPYCLIENTIPP 0 }
+        { DELAYCONNECT 0 }
+        { HOST {} }
+        { IPV4_V6_DUAL 0 }
+        { IS_SSL 0 }
+        { ISMULTI 0 }
+        { ISSERVER 1 }
+        { LOCAL_IP {} }
+        { MAXCLIENT 0 }
+        { MAXOBQD 0 }
+        { MAXPREXLTQD 0 }
+        { MODE {} }
+        { PASSWORD {} }
+        { PDLNAME mlp_tcp.pdl }
+        { PDLTYPE tcp-server }
+        { PORT 10101 }
+        { PRIVATE_KEY {} }
+        { RECONNECT 1 }
+        { REOPEN 5 }
+        { SSL_PROTOCOL All }
+        { TYPE pdl-tcpip }
+    } }
+    { RECVCONTROL {
+        { ACKCONTROL {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { EOMSG {} }
+        { HOLDMSGS 0 }
+        { MSGPRIO 5120 }
+    } }
+    { REPLYCONTROL {
+        { OBRESEND 1 }
+        { REPLYGEN {
+            { TYPE none }
+        } }
+        { TIMEOUT 1 }
+        { WAIT 0 }
+    } }
+    { REPLYFORMAT {
+        { FRLTYPE offlen }
+        { OFFLEN {
+            { LEN 0 }
+            { OFF 0 }
+        } }
+        { TYPE frl }
+    } }
+    { REPLYXLATE {
+ 
+    } }
+    { SAVEMSGS {
+        { INARCHIVE {} }
+        { INARCHIVEPROC {} }
+        { INARCHIVETHRESHOLD 15 }
+        { INARCHIVETIMEOUT 600 }
+        { INFILE EMR_ID_MDOC }
+        { INSAVE 1 }
+        { OUTARCHIVE {} }
+        { OUTARCHIVEPROC {} }
+        { OUTARCHIVETHRESHOLD 15 }
+        { OUTARCHIVETIMEOUT 600 }
+        { OUTFILE EMR_ID_MDOC }
+        { OUTSAVE 0 }
+        { SAVEINARCHIVE 0 }
+        { SAVEOUTARCHIVE 0 }
+        { SAVETRACING 0 }
+    } }
+    { SCHEDULE {} }
+    { SENDDATACTRL {
+        { FAILPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FORWARDTHREAD {} }
+        { HOLDMSGS 0 }
+        { INTERVAL 10 }
+        { OKPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { PREWRITEPROCS {{ARGS {}} {PROCS {}} {PROCSCONTROL {}}} }
+        { RETRIES -1 }
+    } }
+    { SENDREPLYCTRL {
+        { FAILPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FORWARDTHREAD {} }
+        { HOLDMSGS 0 }
+        { INTERVAL 10 }
+        { OKPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { PREWRITEPROCS {{ARGS {}} {PROCS {}} {PROCSCONTROL {}}} }
+        { RETRIES -1 }
+    } }
+    { SMS {
+        { FWD_DATA {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FWD_REPLY {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { IN_DATA {
+            { ARGS {{} {} {}} }
+            { PROCS {hl7Raw_ack filter_anesthesia_mdocs suppress_blank_MDOC} }
+            { PROCSCONTROL {ENABLED ENABLED ENABLED} }
+            { THREADED 0 }
+        } }
+        { IN_REPLY {
+            { ARGS {{}} }
+            { PROCS cl_check_ack }
+            { PROCSCONTROL ENABLED }
+        } }
+        { OUT_DATA {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+            { THREADED 0 }
+        } }
+        { OUT_REPLY {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+    } }
+    { STARTPROCS {
+        { ARGS {} }
+        { PROCS {} }
+        { PROCSCONTROL {} }
+    } }
+    { STOPPROCS {
+        { ARGS {} }
+        { PROCS {} }
+        { PROCSCONTROL {} }
+    } }
+    { SYMNAME EMR_ID_MDOC }
+    { USERECOVERDB 1 }
+
+
+    { AUTOSTART 0 }
+    { BITMAP logo-cerner.gif }
+    { COORDS {0 0} }
+    { DATAFORMAT {
+        { TYPE hl7 }
+    } }
+    { DATAXLATE {
+        {
+            { CACHEMSG 0 }
+            { DEL_ON_ERR_ROUTE 0 }
+            { ROUTE_DETAILS {
+                {
+                    { DEST CAC_OD_PWNT }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST DBMOT_OD_EXT }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {{} {}} }
+                        { PROCS {filter_by_PSY2 first_and_last_obx_powernote2} }
+                        { PROCSCONTROL {ENABLED ENABLED} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_to_dbMotion_ORU_PowerNote2.xlt }
+                } {
+                    { DEST TW_OAS_SC }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_mdoc_to_sc_P01_powernote.xlt }
+                } {
+                    { DEST TW_OAS_SC }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_mdoc_to_sc_P01_siu.xlt }
+                } {
+                    { DEST TW_OD_SC }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {{}} }
+                        { PROCS send_email_large_powernote }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { PREPROCS {
+                        { ARGS {{}} }
+                        { PROCS first_and_last_obx_powernote2 }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_mdoc_to_sc_ORU_powernote4.xlt }
+                } {
+                    { DEST DOC_OD_SC }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_mdoc_to_sc_ORU_powernote_SIU2.xlt }
+                } {
+                    { DEST PCC_OA_EXT }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_ORU_to_PCC_ORU2_Epic_ADT.xlt }
+                } {
+                    { DEST PCC_OD_MDOC }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {{}} }
+                        { PROCS nte_to_obx_sigline }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_ORU_to_PCC_ORU2_powernote_Epic.xlt }
+                } {
+                    { DEST PTKP_OD_MDOC }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {{}} }
+                        { PROCS first_and_last_obx_powernote }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_ORU_PowerNote_to_PK.xlt }
+                } {
+                    { DEST THDOC_OD_MDOC }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_to_theradoc_powernote.xlt }
+                } 
+            } }
+            { ROUTE_ENABLED 1 }
+            { TRXID ORU_R01 }
+            { WILDCARD OFF }
+        } 
+    } }
+    { EDIBATCH {
+        { IN_DATA {
+            { TYPE {} }
+            { VERSION {} }
+        } }
+        { OUT_DATA {
+            { HEADER {} }
+            { TRIGGER {
+                { COUNT {} }
+                { SCHEDULER {} }
+                { TIMER {} }
+            } }
+            { TYPE {} }
+            { VERSION {} }
+        } }
+    } }
+    { ENCODING ASCII }
+    { ENCODING_BOM_IB 0 }
+    { ENCODING_BOM_OB 0 }
+    { ENCODING_XML 0 }
+    { EOCONFIG {} }
+    { GROUPS {PWNT EMR} }
+    { HOSTDOWN 0 }
+    { ICLSERVERPORT {} }
+    { KEEPMSGONDISK 0 }
+    { META {} }
+    { OBWORKASIB 0 }
+    { OUTBOUNDONLY 0 }
+    { PROCESSNAME PWNT }
+    { PROTOCOL {
+        { CA_FILE {} }
+        { CA_PATH {} }
+        { CERT_FILE {} }
+        { CLOSE 0 }
+        { CONTROLMSGS 0 }
+        { COPYCLIENTIPP 0 }
+        { DELAYCONNECT 0 }
+        { HOST {} }
+        { IPV4_V6_DUAL 0 }
+        { IS_SSL 0 }
+        { ISMULTI 0 }
+        { ISSERVER 1 }
+        { LOCAL_IP {} }
+        { MAXCLIENT 0 }
+        { MAXOBQD 0 }
+        { MAXPREXLTQD 0 }
+        { MODE {} }
+        { PASSWORD {} }
+        { PDLNAME mlp_tcp.pdl }
+        { PDLTYPE tcp-server }
+        { PORT 15109 }
+        { PRIVATE_KEY {} }
+        { RECONNECT 1 }
+        { REOPEN 5 }
+        { SSL_PROTOCOL All }
+        { TYPE pdl-tcpip }
+    } }
+    { RECVCONTROL {
+        { ACKCONTROL {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { EOMSG {} }
+        { HOLDMSGS 0 }
+        { MSGPRIO 5120 }
+    } }
+    { REPLYCONTROL {
+        { OBRESEND 1 }
+        { REPLYGEN {
+            { TYPE none }
+        } }
+        { TIMEOUT 1 }
+        { WAIT 0 }
+    } }
+    { REPLYFORMAT {
+        { FRLTYPE offlen }
+        { OFFLEN {
+            { LEN 0 }
+            { OFF 0 }
+        } }
+        { TYPE frl }
+    } }
+    { REPLYXLATE {
+ 
+    } }
+    { SAVEMSGS {
+        { INARCHIVE {} }
+        { INARCHIVEPROC {} }
+        { INARCHIVETHRESHOLD 15 }
+        { INARCHIVETIMEOUT 600 }
+        { INFILE EMR_ID_PWNT }
+        { INSAVE 1 }
+        { OUTARCHIVE {} }
+        { OUTARCHIVEPROC {} }
+        { OUTARCHIVETHRESHOLD 15 }
+        { OUTARCHIVETIMEOUT 600 }
+        { OUTFILE EMR_ID_PWNT }
+        { OUTSAVE 0 }
+        { SAVEINARCHIVE 0 }
+        { SAVEOUTARCHIVE 0 }
+        { SAVETRACING 0 }
+    } }
+    { SCHEDULE {} }
+    { SENDDATACTRL {
+        { FAILPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FORWARDTHREAD {} }
+        { HOLDMSGS 0 }
+        { INTERVAL 10 }
+        { OKPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { PREWRITEPROCS {{ARGS {}} {PROCS {}} {PROCSCONTROL {}}} }
+        { RETRIES -1 }
+    } }
+    { SENDREPLYCTRL {
+        { FAILPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FORWARDTHREAD {} }
+        { HOLDMSGS 0 }
+        { INTERVAL 10 }
+        { OKPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { PREWRITEPROCS {{ARGS {}} {PROCS {}} {PROCSCONTROL {}}} }
+        { RETRIES -1 }
+    } }
+    { SMS {
+        { FWD_DATA {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FWD_REPLY {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { IN_DATA {
+            { ARGS {{}} }
+            { PROCS hl7Raw_ack }
+            { PROCSCONTROL ENABLED }
+            { THREADED 0 }
+        } }
+        { IN_REPLY {
+            { ARGS {{}} }
+            { PROCS cl_check_ack }
+            { PROCSCONTROL ENABLED }
+        } }
+        { OUT_DATA {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+            { THREADED 0 }
+        } }
+        { OUT_REPLY {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+    } }
+    { STARTPROCS {
+        { ARGS {} }
+        { PROCS {} }
+        { PROCSCONTROL {} }
+    } }
+    { STOPPROCS {
+        { ARGS {} }
+        { PROCS {} }
+        { PROCSCONTROL {} }
+    } }
+    { SYMNAME EMR_ID_PWNT }
+    { USERECOVERDB 1 }
+
+
+    { AUTOSTART 1 }
+    { BITMAP logo-cerner.gif }
+    { COORDS {0 0} }
+    { DATAFORMAT {
+        { TYPE hl7 }
+    } }
+    { DATAXLATE {
+        {
+            { CACHEMSG 0 }
+            { DEL_ON_ERR_ROUTE 0 }
+            { ROUTE_DETAILS {
+                {
+                    { DEST EMR_OO_CPTH }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {{}} }
+                        { PROCS filter_by_exam_coode_copath_4Med }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_to_copath_orm.xlt }
+                } {
+                    { DEST 4MED_OOR_LAB }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE lab_to_4med_orm.xlt }
+                } {
+                    { DEST THDOC_OOR_PTMGT }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_to_theradoc_orm.xlt }
+                } 
+            } }
+            { ROUTE_ENABLED 1 }
+            { TRXID ORM_O01 }
+            { WILDCARD OFF }
+        } {
+            { CACHEMSG 0 }
+            { DEL_ON_ERR_ROUTE 0 }
+            { ROUTE_DETAILS {
+                {
+                    { DEST EMR_OO_CPTH }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE copath_to_emr_orr.xlt }
+                } 
+            } }
+            { ROUTE_ENABLED 1 }
+            { TRXID ORR_O02 }
+            { WILDCARD OFF }
+        } 
+    } }
+    { EDIBATCH {
+        { IN_DATA {
+            { TYPE {} }
+            { VERSION {} }
+        } }
+        { OUT_DATA {
+            { HEADER {} }
+            { TRIGGER {
+                { COUNT {} }
+                { SCHEDULER {} }
+                { TIMER {} }
+            } }
+            { TYPE {} }
+            { VERSION {} }
+        } }
+    } }
+    { ENCODING ASCII }
+    { ENCODING_BOM_IB 0 }
+    { ENCODING_BOM_OB 0 }
+    { ENCODING_XML 0 }
+    { EOCONFIG {} }
+    { GROUPS LAB }
+    { HOSTDOWN 0 }
+    { ICLSERVERPORT {} }
+    { KEEPMSGONDISK 0 }
+    { META {} }
+    { OBWORKASIB 0 }
+    { OUTBOUNDONLY 0 }
+    { PROCESSNAME LAB }
+    { PROTOCOL {
+        { CA_FILE {} }
+        { CA_PATH {} }
+        { CERT_FILE {} }
+        { CLOSE 0 }
+        { CONTROLMSGS 0 }
+        { COPYCLIENTIPP 0 }
+        { DELAYCONNECT 0 }
+        { HOST {} }
+        { IPV4_V6_DUAL 0 }
+        { IS_SSL 0 }
+        { ISMULTI 0 }
+        { ISSERVER 1 }
+        { LOCAL_IP {} }
+        { MAXCLIENT 0 }
+        { MAXOBQD 0 }
+        { MAXPREXLTQD 0 }
+        { MODE {} }
+        { PASSWORD {} }
+        { PDLNAME mlp_tcp.pdl }
+        { PDLTYPE tcp-server }
+        { PORT 7310 }
+        { PRIVATE_KEY {} }
+        { RECONNECT 1 }
+        { REOPEN 5 }
+        { SSL_PROTOCOL All }
+        { TYPE pdl-tcpip }
+    } }
+    { RECVCONTROL {
+        { ACKCONTROL {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { EOMSG {} }
+        { HOLDMSGS 0 }
+        { MSGPRIO 5120 }
+    } }
+    { REPLYCONTROL {
+        { OBRESEND 1 }
+        { REPLYGEN {
+            { TYPE none }
+        } }
+        { TIMEOUT 45 }
+        { WAIT 0 }
+    } }
+    { REPLYFORMAT {
+        { FRLTYPE offlen }
+        { OFFLEN {
+            { LEN 0 }
+            { OFF 0 }
+        } }
+        { TYPE frl }
+    } }
+    { REPLYXLATE {
+ 
+    } }
+    { SAVEMSGS {
+        { INARCHIVE {} }
+        { INARCHIVEPROC {} }
+        { INARCHIVETHRESHOLD 15 }
+        { INARCHIVETIMEOUT 600 }
+        { INFILE EMR_IO_LAB }
+        { INSAVE 1 }
+        { OUTARCHIVE {} }
+        { OUTARCHIVEPROC {} }
+        { OUTARCHIVETHRESHOLD 15 }
+        { OUTARCHIVETIMEOUT 600 }
+        { OUTFILE {} }
+        { OUTSAVE 0 }
+        { SAVEINARCHIVE 0 }
+        { SAVEOUTARCHIVE 0 }
+        { SAVETRACING 0 }
+    } }
+    { SCHEDULE {} }
+    { SENDDATACTRL {
+        { FAILPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FORWARDTHREAD {} }
+        { HOLDMSGS 0 }
+        { INTERVAL 10 }
+        { OKPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { PREWRITEPROCS {{ARGS {}} {PROCS {}} {PROCSCONTROL {}}} }
+        { RETRIES -1 }
+    } }
+    { SENDREPLYCTRL {
+        { FAILPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FORWARDTHREAD {} }
+        { HOLDMSGS 0 }
+        { INTERVAL 10 }
+        { OKPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { PREWRITEPROCS {{ARGS {}} {PROCS {}} {PROCSCONTROL {}}} }
+        { RETRIES -1 }
+    } }
+    { SMS {
+        { FWD_DATA {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FWD_REPLY {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { IN_DATA {
+            { ARGS {{} {{Remove_Character {& and}}} {}} }
+            { PROCS {hl7Raw_ack tps_remove_Character copath_check_orc1_from_mille3} }
+            { PROCSCONTROL {ENABLED ENABLED ENABLED} }
+            { THREADED 0 }
+        } }
+        { IN_REPLY {
+            { ARGS {{}} }
+            { PROCS hcitpsmsgkill }
+            { PROCSCONTROL ENABLED }
+        } }
+        { OUT_DATA {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+            { THREADED 0 }
+        } }
+        { OUT_REPLY {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+    } }
+    { STARTPROCS {
+        { ARGS {} }
+        { PROCS {} }
+        { PROCSCONTROL {} }
+    } }
+    { STOPPROCS {
+        { ARGS {} }
+        { PROCS {} }
+        { PROCSCONTROL {} }
+    } }
+    { SYMNAME EMR_IO_LAB }
+    { USERECOVERDB 1 }
+
+
+    { AUTOSTART 1 }
+    { BITMAP logo-cerner.gif }
+    { COORDS {0 0} }
+    { DATAFORMAT {
+        { TYPE hl7 }
+    } }
+    { DATAXLATE {
+        {
+            { CACHEMSG 0 }
+            { DEL_ON_ERR_ROUTE 0 }
+            { ROUTE_DETAILS {
+                {
+                    { DEST ARIA_OA_RAD }
+                    { PROCS {
+                        { ARGS {{{PASSCOND {RADTHERAPY}} {SEGNAME OBR} {FIELDNUM 4} {SUBFIELDNUM 0}} {}} }
+                        { PROCS {kill_msg radtherapy_to_aria} }
+                        { PROCSCONTROL {ENABLED ENABLED} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST TELTK_OAO_PTMGT }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_to_teltk_bed_orders.xlt }
+                } {
+                    { DEST TW_OD_SC }
+                    { DETAILS_ENABLED 0 }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_to_TW_discharge_orders_ED.xlt }
+                } {
+                    { DEST UDS_OAO_REHAB }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {{}} }
+                        { PROCS remove_tilde_from_doctors }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_to_uds_orders.xlt }
+                } {
+                    { DEST CE_OO_BED }
+                    { DETAILS_ENABLED 0 }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {{{PASSCOND {Referral Clinical Ethics Order}} {SEGNAME OBR} {FIELDNUM 4} {SUBFIELDNUM 0}}} }
+                        { PROCS kill_msg }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_to_clinethcis_ORM.xlt }
+                } 
+            } }
+            { ROUTE_ENABLED 1 }
+            { TRXID ORM_O01 }
+            { WILDCARD OFF }
+        } {
+            { CACHEMSG 0 }
+            { DEL_ON_ERR_ROUTE 0 }
+            { ROUTE_DETAILS {
+                {
+                    { DEST TW_OAS_SC }
+                    { DETAILS_ENABLED 0 }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_dischorm_to_sc_P01.xlt }
+                } 
+            } }
+            { ROUTE_ENABLED 1 }
+            { TRXID ORU_R01 }
+            { WILDCARD OFF }
+        } 
+    } }
+    { EDIBATCH {
+        { IN_DATA {
+            { TYPE {} }
+            { VERSION {} }
+        } }
+        { OUT_DATA {
+            { HEADER {} }
+            { TRIGGER {
+                { COUNT {} }
+                { SCHEDULER {} }
+                { TIMER {} }
+            } }
+            { TYPE {} }
+            { VERSION {} }
+        } }
+    } }
+    { ENCODING ASCII }
+    { ENCODING_BOM_IB 0 }
+    { ENCODING_BOM_OB 0 }
+    { ENCODING_XML 0 }
+    { EOCONFIG {} }
+    { GROUPS {BED EMR} }
+    { HOSTDOWN 0 }
+    { ICLSERVERPORT {} }
+    { KEEPMSGONDISK 0 }
+    { META {} }
+    { OBWORKASIB 0 }
+    { OUTBOUNDONLY 0 }
+    { PROCESSNAME BED }
+    { PROTOCOL {
+        { CA_FILE {} }
+        { CA_PATH {} }
+        { CERT_FILE {} }
+        { CLOSE 0 }
+        { CONTROLMSGS 0 }
+        { COPYCLIENTIPP 0 }
+        { DELAYCONNECT 0 }
+        { HOST {} }
+        { IPV4_V6_DUAL 0 }
+        { IS_SSL 0 }
+        { ISMULTI 0 }
+        { ISSERVER 1 }
+        { LOCAL_IP {} }
+        { MAXCLIENT 0 }
+        { MAXOBQD 0 }
+        { MAXPREXLTQD 0 }
+        { MODE {} }
+        { PASSWORD {} }
+        { PDLNAME mlp_tcp.pdl }
+        { PDLTYPE tcp-server }
+        { PORT 9906 }
+        { PRIVATE_KEY {} }
+        { RECONNECT 1 }
+        { REOPEN 5 }
+        { SSL_PROTOCOL All }
+        { TYPE pdl-tcpip }
+    } }
+    { RECVCONTROL {
+        { ACKCONTROL {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { EOMSG {} }
+        { HOLDMSGS 0 }
+        { MSGPRIO 5120 }
+    } }
+    { REPLYCONTROL {
+        { OBRESEND 1 }
+        { REPLYGEN {
+            { TYPE none }
+        } }
+        { TIMEOUT 1 }
+        { WAIT 0 }
+    } }
+    { REPLYFORMAT {
+        { FRLTYPE offlen }
+        { OFFLEN {
+            { LEN 0 }
+            { OFF 0 }
+        } }
+        { TYPE frl }
+    } }
+    { REPLYXLATE {
+ 
+    } }
+    { SAVEMSGS {
+        { INARCHIVE {} }
+        { INARCHIVEPROC {} }
+        { INARCHIVETHRESHOLD 15 }
+        { INARCHIVETIMEOUT 600 }
+        { INFILE EMR_IO_BED }
+        { INSAVE 1 }
+        { OUTARCHIVE {} }
+        { OUTARCHIVEPROC {} }
+        { OUTARCHIVETHRESHOLD 15 }
+        { OUTARCHIVETIMEOUT 600 }
+        { OUTFILE EMR_IO_BED }
+        { OUTSAVE 0 }
+        { SAVEINARCHIVE 0 }
+        { SAVEOUTARCHIVE 0 }
+        { SAVETRACING 0 }
+    } }
+    { SCHEDULE {} }
+    { SENDDATACTRL {
+        { FAILPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FORWARDTHREAD {} }
+        { HOLDMSGS 0 }
+        { INTERVAL 10 }
+        { OKPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { PREWRITEPROCS {{ARGS {}} {PROCS {}} {PROCSCONTROL {}}} }
+        { RETRIES -1 }
+    } }
+    { SENDREPLYCTRL {
+        { FAILPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FORWARDTHREAD {} }
+        { HOLDMSGS 0 }
+        { INTERVAL 10 }
+        { OKPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { PREWRITEPROCS {{ARGS {}} {PROCS {}} {PROCSCONTROL {}}} }
+        { RETRIES -1 }
+    } }
+    { SMS {
+        { FWD_DATA {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FWD_REPLY {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { IN_DATA {
+            { ARGS {{}} }
+            { PROCS hl7Raw_ack }
+            { PROCSCONTROL ENABLED }
+            { THREADED 0 }
+        } }
+        { IN_REPLY {
+            { ARGS {{}} }
+            { PROCS cl_check_ack }
+            { PROCSCONTROL ENABLED }
+        } }
+        { OUT_DATA {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+            { THREADED 0 }
+        } }
+        { OUT_REPLY {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+    } }
+    { STARTPROCS {
+        { ARGS {} }
+        { PROCS {} }
+        { PROCSCONTROL {} }
+    } }
+    { STOPPROCS {
+        { ARGS {} }
+        { PROCS {} }
+        { PROCSCONTROL {} }
+    } }
+    { SYMNAME EMR_IO_BED }
+    { USERECOVERDB 1 }
+
+
+    { AUTOSTART 1 }
+    { BITMAP logo-cerner.gif }
+    { COORDS {0 0} }
+    { DATAFORMAT {
+        { TYPE hl7 }
+    } }
+    { DATAXLATE {
+        {
+            { CACHEMSG 0 }
+            { DEL_ON_ERR_ROUTE 0 }
+            { ROUTE_DETAILS {
+                {
+                    { DEST PACS_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST HIIQ_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST SC_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST SIU_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } 
+            } }
+            { ROUTE_ENABLED 1 }
+            { TRXID _HCI_static_route_ }
+            { WILDCARD OFF }
+        } {
+            { CACHEMSG 0 }
+            { DEL_ON_ERR_ROUTE 0 }
+            { ROUTE_DETAILS {
+                {
+                    { DEST ARIA_ODR_RAD }
+                    { PROCS {
+                        { ARGS {{} {}} }
+                        { PROCS {radnet_to_aria_mdm_new2 remove_cpt4_orc3} }
+                        { PROCSCONTROL {ENABLED ENABLED} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST CAC_OR_RAD }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } {
+                    { DEST PTKP_OR_PTMGT }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {{}} }
+                        { PROCS pk_addendum_obx2 }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { PREPROCS {
+                        { ARGS {{}} }
+                        { PROCS remove_cpt4_orc3 }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE radnet_to_patientkeeper_oru_new.xlt }
+                } {
+                    { DEST NOTI_OOR_DICT }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {{{{SEGNAME PV1} {FIELD {7 17}} {REPSUB 8} {REPCOND {Doctor Nbr}}}}} }
+                        { PROCS hl7_quick_format_v3 }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE pacs_notifi_oru.xlt }
+                } {
+                    { DEST EXT_send }
+                    { PROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { TYPE raw }
+                } 
+            } }
+            { ROUTE_ENABLED 1 }
+            { TRXID ORU_R01 }
+            { WILDCARD OFF }
+        } 
+    } }
+    { EDIBATCH {
+        { IN_DATA {
+            { TYPE {} }
+            { VERSION {} }
+        } }
+        { OUT_DATA {
+            { HEADER {} }
+            { TRIGGER {
+                { COUNT {} }
+                { SCHEDULER {} }
+                { TIMER {} }
+            } }
+            { TYPE {} }
+            { VERSION {} }
+        } }
+    } }
+    { ENCODING ASCII }
+    { ENCODING_BOM_IB 0 }
+    { ENCODING_BOM_OB 0 }
+    { ENCODING_XML 0 }
+    { EOCONFIG {} }
+    { GROUPS {EMR RAD} }
+    { HOSTDOWN 0 }
+    { ICLSERVERPORT {} }
+    { KEEPMSGONDISK 0 }
+    { META {} }
+    { OBWORKASIB 0 }
+    { OUTBOUNDONLY 0 }
+    { PROCESSNAME RAD }
+    { PROTOCOL {
+        { CA_FILE {} }
+        { CA_PATH {} }
+        { CERT_FILE {} }
+        { CLOSE 0 }
+        { CONTROLMSGS 0 }
+        { COPYCLIENTIPP 0 }
+        { DELAYCONNECT 0 }
+        { HOST {} }
+        { IPV4_V6_DUAL 0 }
+        { IS_SSL 0 }
+        { ISMULTI 0 }
+        { ISSERVER 1 }
+        { LOCAL_IP {} }
+        { MAXCLIENT 0 }
+        { MAXOBQD 0 }
+        { MAXPREXLTQD 0 }
+        { MODE {} }
+        { PASSWORD {} }
+        { PDLNAME mlp_tcp.pdl }
+        { PDLTYPE tcp-server }
+        { PORT 9509 }
+        { PRIVATE_KEY {} }
+        { RECONNECT 1 }
+        { REOPEN 5 }
+        { SSL_PROTOCOL All }
+        { TYPE pdl-tcpip }
+    } }
+    { RECVCONTROL {
+        { ACKCONTROL {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { EOMSG {} }
+        { HOLDMSGS 0 }
+        { MSGPRIO 5120 }
+    } }
+    { REPLYCONTROL {
+        { OBRESEND 1 }
+        { REPLYGEN {
+            { TYPE none }
+        } }
+        { TIMEOUT 45 }
+        { WAIT 0 }
+    } }
+    { REPLYFORMAT {
+        { FRLTYPE offlen }
+        { OFFLEN {
+            { LEN 0 }
+            { OFF 0 }
+        } }
+        { TYPE frl }
+    } }
+    { REPLYXLATE {
+ 
+    } }
+    { SAVEMSGS {
+        { INARCHIVE {} }
+        { INARCHIVEPROC {} }
+        { INARCHIVETHRESHOLD 15 }
+        { INARCHIVETIMEOUT 600 }
+        { INFILE EMR_IOR_RAD }
+        { INSAVE 1 }
+        { OUTARCHIVE {} }
+        { OUTARCHIVEPROC {} }
+        { OUTARCHIVETHRESHOLD 15 }
+        { OUTARCHIVETIMEOUT 600 }
+        { OUTFILE {} }
+        { OUTSAVE 0 }
+        { SAVEINARCHIVE 0 }
+        { SAVEOUTARCHIVE 0 }
+        { SAVETRACING 0 }
+    } }
+    { SCHEDULE {} }
+    { SENDDATACTRL {
+        { FAILPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FORWARDTHREAD {} }
+        { HOLDMSGS 0 }
+        { INTERVAL 10 }
+        { OKPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { PREWRITEPROCS {{ARGS {}} {PROCS {}} {PROCSCONTROL {}}} }
+        { RETRIES -1 }
+    } }
+    { SENDREPLYCTRL {
+        { FAILPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FORWARDTHREAD {} }
+        { HOLDMSGS 0 }
+        { INTERVAL 10 }
+        { OKPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { PREWRITEPROCS {{ARGS {}} {PROCS {}} {PROCSCONTROL {}}} }
+        { RETRIES -1 }
+    } }
+    { SMS {
+        { FWD_DATA {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FWD_REPLY {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { IN_DATA {
+            { ARGS {{}} }
+            { PROCS hl7Raw_ack }
+            { PROCSCONTROL ENABLED }
+            { THREADED 0 }
+        } }
+        { IN_REPLY {
+            { ARGS {{}} }
+            { PROCS hcitpsmsgkill }
+            { PROCSCONTROL ENABLED }
+        } }
+        { OUT_DATA {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+            { THREADED 0 }
+        } }
+        { OUT_REPLY {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+    } }
+    { STARTPROCS {
+        { ARGS {} }
+        { PROCS {} }
+        { PROCSCONTROL {} }
+    } }
+    { STOPPROCS {
+        { ARGS {} }
+        { PROCS {} }
+        { PROCSCONTROL {} }
+    } }
+    { SYMNAME EMR_IOR_RAD }
+    { USERECOVERDB 1 }
+
+
+    { AUTOSTART 1 }
+    { BITMAP logo-cerner.gif }
+    { COORDS {0 0} }
+    { DATAFORMAT {
+        { TYPE hl7 }
+    } }
+    { DATAXLATE {
+        {
+            { CACHEMSG 0 }
+            { DEL_ON_ERR_ROUTE 1 }
+            { ROUTE_DETAILS {
+                {
+                    { DEST DLBY_OAO_DICT }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {{}} }
+                        { PROCS get_tech_comments_HVodbc }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { PREPROCS {
+                        { ARGS {{{Remove_Character {& and}}}} }
+                        { PROCS tps_remove_Character }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE radnet_to_dicvt_orm2_dolbey_mjkNEW.xlt }
+                } {
+                    { DEST MAGV_OO_MAM }
+                    { DETAILS_ENABLED 0 }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {{}} }
+                        { PROCS filter_mammo_code_orders }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE radnet_to_mam_orm2.xlt }
+                } {
+                    { DEST TELTK_OAO_PTMGT }
+                    { DETAILS_ENABLED 0 }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {{{PTTYPE {ER}} {CONDITION {C}}}} }
+                        { PROCS filter_by_pt_type }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE emr_to_teltk_rad_orders.xlt }
+                } {
+                    { DEST NOTI_OOR_DICT }
+                    { DETAILS_ENABLED 0 }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {{{{SEGNAME PV1} {FIELD {7 17}} {REPSUB 8} {REPCOND {Doctor Nbr}}}}} }
+                        { PROCS hl7_quick_format_v3 }
+                        { PROCSCONTROL ENABLED }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE radnet_to_dictvt_orm2_notifi.xlt }
+                } {
+                    { DEST CRSC_OAO_DICT }
+                    { DETAILS_ENABLED 0 }
+                    { ELEVATEWARNINGFORPARSE 0 }
+                    { POSTPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { PREPROCS {
+                        { ARGS {} }
+                        { PROCS {} }
+                        { PROCSCONTROL {} }
+                    } }
+                    { READONLY 0 }
+                    { TYPE xlate }
+                    { XLATE radnet_to_dicvt_orm2_dolbey.xlt }
+                } 
+            } }
+            { ROUTE_ENABLED 1 }
+            { TRXID ORM_O01 }
+            { WILDCARD OFF }
+        } 
+    } }
+    { EDIBATCH {
+        { IN_DATA {
+            { TYPE {} }
+            { VERSION {} }
+        } }
+        { OUT_DATA {
+            { HEADER {} }
+            { TRIGGER {
+                { COUNT {} }
+                { SCHEDULER {} }
+                { TIMER {} }
+            } }
+            { TYPE {} }
+            { VERSION {} }
+        } }
+    } }
+    { ENCODING ASCII }
+    { ENCODING_BOM_IB 0 }
+    { ENCODING_BOM_OB 0 }
+    { ENCODING_XML 0 }
+    { EOCONFIG {} }
+    { GROUPS {EMR DICT RAD} }
+    { HOSTDOWN 0 }
+    { ICLSERVERPORT {} }
+    { KEEPMSGONDISK 0 }
+    { META {} }
+    { OBWORKASIB 0 }
+    { OUTBOUNDONLY 0 }
+    { PROCESSNAME RAD }
+    { PROTOCOL {
+        { CA_FILE {} }
+        { CA_PATH {} }
+        { CERT_FILE {} }
+        { CLOSE 0 }
+        { CONTROLMSGS 0 }
+        { COPYCLIENTIPP 0 }
+        { DELAYCONNECT 0 }
+        { HOST {} }
+        { IPV4_V6_DUAL 0 }
+        { IS_SSL 0 }
+        { ISMULTI 0 }
+        { ISSERVER 1 }
+        { LOCAL_IP {} }
+        { MAXCLIENT 0 }
+        { MAXOBQD 0 }
+        { MAXPREXLTQD 0 }
+        { MODE {} }
+        { PASSWORD {} }
+        { PDLNAME mlp_tcp.pdl }
+        { PDLTYPE tcp-server }
+        { PORT 9209 }
+        { PRIVATE_KEY {} }
+        { RECONNECT 1 }
+        { REOPEN 5 }
+        { SSL_PROTOCOL All }
+        { TYPE pdl-tcpip }
+    } }
+    { RECVCONTROL {
+        { ACKCONTROL {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { EOMSG {} }
+        { HOLDMSGS 0 }
+        { MSGPRIO 5120 }
+    } }
+    { REPLYCONTROL {
+        { OBRESEND 1 }
+        { REPLYGEN {
+            { TYPE none }
+        } }
+        { TIMEOUT 45 }
+        { WAIT 0 }
+    } }
+    { REPLYFORMAT {
+        { FRLTYPE offlen }
+        { OFFLEN {
+            { LEN 0 }
+            { OFF 0 }
+        } }
+        { TYPE frl }
+    } }
+    { REPLYXLATE {
+ 
+    } }
+    { SAVEMSGS {
+        { INARCHIVE {} }
+        { INARCHIVEPROC {} }
+        { INARCHIVETHRESHOLD 15 }
+        { INARCHIVETIMEOUT 600 }
+        { INFILE EMR_IO_RAD }
+        { INSAVE 1 }
+        { OUTARCHIVE {} }
+        { OUTARCHIVEPROC {} }
+        { OUTARCHIVETHRESHOLD 15 }
+        { OUTARCHIVETIMEOUT 600 }
+        { OUTFILE EMR_IO_RAD }
+        { OUTSAVE 0 }
+        { SAVEINARCHIVE 0 }
+        { SAVEOUTARCHIVE 0 }
+        { SAVETRACING 0 }
+    } }
+    { SCHEDULE {} }
+    { SENDDATACTRL {
+        { FAILPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FORWARDTHREAD {} }
+        { HOLDMSGS 0 }
+        { INTERVAL 10 }
+        { OKPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { PREWRITEPROCS {{ARGS {}} {PROCS {}} {PROCSCONTROL {}}} }
+        { RETRIES -1 }
+    } }
+    { SENDREPLYCTRL {
+        { FAILPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FORWARDTHREAD {} }
+        { HOLDMSGS 0 }
+        { INTERVAL 10 }
+        { OKPROCS {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { PREWRITEPROCS {{ARGS {}} {PROCS {}} {PROCSCONTROL {}}} }
+        { RETRIES -1 }
+    } }
+    { SMS {
+        { FWD_DATA {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { FWD_REPLY {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+        { IN_DATA {
+            { ARGS {{}} }
+            { PROCS hl7Raw_ack }
+            { PROCSCONTROL ENABLED }
+            { THREADED 0 }
+        } }
+        { IN_REPLY {
+            { ARGS {{}} }
+            { PROCS hcitpsmsgkill }
+            { PROCSCONTROL ENABLED }
+        } }
+        { OUT_DATA {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+            { THREADED 0 }
+        } }
+        { OUT_REPLY {
+            { ARGS {} }
+            { PROCS {} }
+            { PROCSCONTROL {} }
+        } }
+    } }
+    { STARTPROCS {
+        { ARGS {} }
+        { PROCS {} }
+        { PROCSCONTROL {} }
+    } }
+    { STOPPROCS {
+        { ARGS {} }
+        { PROCS {} }
+        { PROCSCONTROL {} }
+    } }
+    { SYMNAME EMR_IO_RAD }
+    { USERECOVERDB 1 }
+
+<!DOCTYPE html><html lang=en><head><title>Current Cerner Millenium Domain Interface Connections in TEST</title>
+<link type=text/css rel=stylesheet href=css/bootstrap.min.css></head>
+<body><div class="container container-responsive"><div class="row"><div class="col-md-2"></div><div class="col-md-8">
+<h1>Cerner Millenium Domain Interface Connections in TEST</h1><br>
+<h2>Updated at 04/04/2017 11:12:34 </h2><hr>
+<table class="table table-striped table-hover"><thead><tr><th>Connection</th><th>Environment</th><th>Status</th></thead><tbody>
+<tr><td>Test ADT</td><td>milcert</td>
+<td class=success>ESTABLISHED</td></tr>
+<tr><td>Test ADT</td><td>child</td>
+<td class=warning>DISCONNECTED</td></tr>
+<tr><td>TEST eScription Documents</td><td>child</td>
+<td class=warning>DISCONNECTED</td></tr>
+<tr><td>TEST POWERNOTES</td><td>child</td>
+<td class=warning>DISCONNECTED</td></tr>
+<tr><td>TEST LAB Orders</td><td>child</td>
+<td class=warning>DISCONNECTED</td></tr>
+<tr><td>TEST LAB Results</td><td>milbuild</td>
+<td class=success>ESTABLISHED</td></tr>
+<tr><td>TEST MPS Scheduling</td><td>milcert</td>
+<td class=success>ESTABLISHED</td></tr>
+<tr><td>TEST Bed Orders</td><td>child</td>
+<td class=warning>DISCONNECTED</td></tr>
+<tr><td>TEST RAD Orders/Results</td><td>child</td>
+<td class=warning>DISCONNECTED</td></tr>
+<tr><td>TEST RAD Orders Dolbey</td><td>child</td>
+<td class=warning>DISCONNECTED</td></tr>
+</tbody><table><hr></div></div class="col-md-2"></div></div></body></html>

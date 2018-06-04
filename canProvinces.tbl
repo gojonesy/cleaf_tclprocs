@@ -1,0 +1,49 @@
+# Translation lookup table (Canadian Province code vs. name)
+#
+prologue
+    who:          golan
+    date:         Mon Jun 24 22:03:45 MDT 2002
+    version:      3.0
+    type:         tbl
+    bidir:        0
+    inname:       input
+    outname:      output
+end_prologue
+#
+dflt=__non-existent__
+#
+AB
+Alberta
+#
+BC
+British Columbia
+#
+MB
+Manitoba
+#
+NB
+New Brunswick
+#
+NF
+Newfoundland
+#
+NS
+Nova Scotia
+#
+NT
+North West Territories
+#
+ON
+Ontario
+#
+PE
+Prince Edward Island
+#
+PQ
+Quebec
+#
+SK
+Saskatchewan
+#
+YT
+Yukon
